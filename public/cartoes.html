@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cartões | Ritmo Financeiro Pro</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <script src="theme.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="cartoes.css" />
+</head>
+<body>
+  <div class="page-bg"></div>
+
+  <main class="cards-shell">
+    <section class="cards-window">
+      <header class="topbar">
+        <div class="brand-block">
+          <div class="brand">Central de Finanças</div>
+          <div class="current-month">
+            <label for="cardMonthPicker">Mês analisado</label>
+            <input id="cardMonthPicker" type="month" />
+          </div>
+        </div>
+
+        <div class="top-actions">
+          <button type="button" id="themeToggle" class="theme-toggle-btn" aria-label="Alternar tema">
+            <span class="theme-icon">☀</span>
+          </button>
+          <a href="/perfil" class="profile">
+            <div class="avatar"><img src="img/no-logon-profile.svg" width="23" height="23" alt=""></div>
+            <span>Perfil</span>
+          </a>
+        </div>
+      </header>
+
+      <nav class="tabs">
+        <a href="/">Geral</a>
+        <a href="/metas">Metas diárias</a>
+        <a class="active" href="/cartoes">Cartões</a>
+      </nav>
+
+      <section class="cards-layout">
+        <div class="cards-main">
+          <div class="panel-head">
+            <div>
+              <h1>Cartões protegidos</h1>
+              <p>Limite, fatura e simulação ficam mascarados até o desbloqueio temporário por PIN.</p>
+            </div>
+          </div>
+
+          <div class="credit-card-grid" id="cardsGrid"></div>
+        </div>
+
+        <aside class="summary-side">
+          <section class="side-card side-highlight">
+            <span class="small-eyebrow">Limite total</span>
+            <strong id="summaryLimit" class="summary-value masked">R$ ••••••</strong>
+            <p id="summaryLimitNote">Desbloqueie todos os cartões para ver o total.</p>
+          </section>
+
+          <section class="side-card">
+            <span class="small-eyebrow">Fatura do mês</span>
+            <strong id="summaryInvoice" class="summary-value">R$ 0,00</strong>
+            <p>Soma apenas dos cartões desbloqueados nesta sessão.</p>
+          </section>
+
+          <section class="side-card">
+            <span class="small-eyebrow">Parcelas ativas</span>
+            <strong id="summaryInstallments" class="summary-value">0</strong>
+            <p>Compras parceladas visíveis nos cartões desbloqueados.</p>
+          </section>
+        </aside>
+      </section>
+    </section>
+  </main>
+
+  <div class="pin-backdrop hidden" id="pinBackdrop">
+    <section class="pin-modal" role="dialog" aria-modal="true" aria-labelledby="pinModalTitle">
+      <div class="pin-modal-head">
+        <div>
+          <h2 id="pinModalTitle">PIN do cartão</h2>
+          <p id="pinModalDescription">Digite o PIN para desbloquear os dados por 15 minutos.</p>
+        </div>
+        <button class="icon-btn" id="closePinModalBtn" type="button" aria-label="Fechar">×</button>
+      </div>
+
+      <form class="pin-form" id="pinForm">
+        <label>
+          <span id="pinInputLabel">PIN</span>
+          <input id="pinInput" name="pin" type="password" inputmode="numeric" autocomplete="one-time-code" maxlength="6" required />
+        </label>
+
+        <label class="hidden" id="confirmPinField">
+          <span>Confirmar PIN</span>
+          <input id="confirmPinInput" name="confirmPin" type="password" inputmode="numeric" autocomplete="one-time-code" maxlength="6" />
+        </label>
+
+        <div class="pin-dots" id="pinDots" aria-hidden="true">
+          <span></span><span></span><span></span><span></span><span></span><span></span>
+        </div>
+
+        <p class="pin-help" id="pinHelp">3 tentativas restantes</p>
+        <p class="pin-error hidden" id="pinError"></p>
+
+        <button class="submit-btn" id="pinSubmitBtn" type="submit">Confirmar</button>
+      </form>
+    </section>
+  </div>
+
+  <div class="toast hidden" id="toast"></div>
+  <script src="cartoes.js"></script>
+</body>
+</html>

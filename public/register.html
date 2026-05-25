@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Criar Conta | Ritmo Financeiro Pro</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body class="auth-page">
+  <div class="page-bg"></div>
+
+  <main class="auth-shell">
+    <section class="auth-card">
+      <div class="auth-brand">
+        <div class="hero-badge">Ritmo Financeiro Pro</div>
+        <h1>Criar conta</h1>
+      </div>
+
+      <p class="auth-error hidden" id="registerError"></p>
+
+      <form class="auth-form" id="registerForm" novalidate>
+        <label>
+          <span>Nome</span>
+          <input name="name" type="text" autocomplete="name" maxlength="100" required />
+        </label>
+
+        <label>
+          <span>E-mail</span>
+          <input name="email" type="email" autocomplete="email" maxlength="255" required />
+        </label>
+
+        <label>
+          <span>Senha</span>
+          <div class="password-field">
+            <input name="password" type="password" autocomplete="new-password" maxlength="72" required />
+            <button type="button" data-password-toggle>Mostrar</button>
+          </div>
+          <small class="password-hint" id="passwordHint">Mínimo 8 caracteres, 1 número e 1 letra maiúscula.</small>
+        </label>
+
+        <label>
+          <span>Confirmar senha</span>
+          <div class="password-field">
+            <input name="confirmPassword" type="password" autocomplete="new-password" maxlength="72" required />
+            <button type="button" data-password-toggle>Mostrar</button>
+          </div>
+          <small class="password-hint hidden" id="confirmHint">As senhas precisam ser iguais.</small>
+        </label>
+
+        <button class="submit-btn" type="submit">Criar conta</button>
+      </form>
+
+      <p class="auth-switch">Já tem conta? <a href="/login">Entrar</a></p>
+    </section>
+  </main>
+
+  <script src="auth.js"></script>
+</body>
+</html>

@@ -7,6 +7,7 @@
   <meta name="description" content="Dashboard financeiro pessoal com controle de salário, gastos, cartões de crédito, parcelas e metas." />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <script src="theme.js"></script>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css" />
 </head>
@@ -44,19 +45,70 @@
             <input id="transactionSearch" type="text" placeholder="Buscar lançamento ou categoria" />
           </div>
 
-          <div class="profile">
+          <button type="button" id="toggleFiltersBtn" class="filter-toggle-btn">Filtros</button>
+
+          <button type="button" id="themeToggle" class="theme-toggle-btn" aria-label="Alternar tema">
+            <span class="theme-icon">☀</span>
+          </button>
+
+          <a href="/perfil" class="profile">
             <div class="avatar"><img src="img/no-logon-profile.svg" width="23" height="23" alt=""></div>
-            <span>Max ▾</span>
-          </div>
+            <span>Perfil</span>
+          </a>
         </div>
       </header>
+
+      <section class="advanced-filters collapsed" id="advancedFilters">
+        <label>
+          <span>Tipo</span>
+          <select id="filterType">
+            <option value="">Todos</option>
+            <option value="income">Entradas</option>
+            <option value="expense">Despesas</option>
+          </select>
+        </label>
+        <label>
+          <span>Categoria</span>
+          <select id="filterCategory">
+            <option value="">Todas</option>
+          </select>
+        </label>
+        <label>
+          <span>Valor de</span>
+          <input id="filterMinAmount" type="number" min="0" step="0.01" placeholder="R$ 0,00" />
+        </label>
+        <label>
+          <span>Valor até</span>
+          <input id="filterMaxAmount" type="number" min="0" step="0.01" placeholder="R$ 0,00" />
+        </label>
+        <label>
+          <span>Pagamento</span>
+          <select id="filterPayment">
+            <option value="">Todos</option>
+          </select>
+        </label>
+        <button type="button" id="clearFiltersBtn" class="action-btn">Limpar filtros</button>
+      </section>
 
       <nav class="tabs">
         <a class="active" href="/">Geral</a>
         <a href="/metas">Metas diárias</a>
+        <a href="/cartoes">Cartões</a>
       </nav>
 
+      <section class="alerts-banner hidden" id="alertsBanner"></section>
+
       <section class="kpi-grid">
+        <article class="kpi-card score-card" id="scoreCard">
+          <span class="kpi-label">Ritmo Score</span>
+          <strong class="kpi-value score-value" id="scoreValue">--</strong>
+          <small class="kpi-foot">
+            <span id="scoreLabel">Calculando</span>
+            <span id="scoreDelta" class="score-delta">→</span>
+          </small>
+          <div class="score-tooltip" id="scoreTooltip"></div>
+        </article>
+
         <article class="kpi-card">
           <span class="kpi-label">Salário base</span>
           <strong class="kpi-value" id="salaryValue">R$ 0,00</strong>
@@ -137,12 +189,14 @@
           <div class="panel-head">
             <div>
               <h3>Fluxo mensal</h3>
-              <p>Últimos 6 meses, comparando entradas e saídas.</p>
+              <p>Últimos 12 meses, comparando entradas, saídas e meta de gastos.</p>
             </div>
           </div>
 
           <div class="chart-card trend-card">
-            <canvas id="trendChart"></canvas>
+            <div class="trend-scroll">
+              <canvas id="trendChart"></canvas>
+            </div>
           </div>
         </div>
       </section>
@@ -160,8 +214,10 @@
             <button class="action-btn" data-modal-target="salaryModal">Definir salário</button>
             <button class="action-btn action-primary" data-modal-target="transactionModal">Novo lançamento</button>
             <button class="action-btn" data-modal-target="categoryModal">Nova categoria</button>
+            <button class="action-btn" id="exportCsvBtn" type="button">Exportar CSV</button>
           </div>
 
+          <div class="recurring-banner hidden" id="recurringSuggestions"></div>
           <div class="transactions-list" id="transactionsList"></div>
         </div>
 
@@ -256,6 +312,13 @@
       <span>Observações</span>
       <textarea name="notes" rows="3" placeholder="Opcional"></textarea>
     </label>
+    <div class="recurring-control">
+      <label class="checkbox-row">
+        <input name="isRecurring" type="checkbox" />
+        <span>Repetir mensalmente no dia</span>
+      </label>
+      <input name="recurrenceDay" type="number" min="1" max="31" value="1" aria-label="Dia da recorrência" />
+    </div>
     <button class="submit-btn" type="submit">Salvar lançamento</button>
   </template>
 

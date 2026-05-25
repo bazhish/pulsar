@@ -1,57 +1,98 @@
+const token = sessionStorage.getItem("rf_token");
+if (!token) {
+  window.location.href = "/login";
+  throw new Error("Autenticacao necessaria.");
+}
+
+function authFetch(url, options = {}) {
+  const headers = {
+    ...(options.headers || {}),
+    Authorization: `Bearer ${token}`
+  };
+
+  return fetch(url, { ...options, headers }).then((response) => {
+    if (response.status === 401) {
+      sessionStorage.removeItem("rf_token");
+      window.location.href = "/login";
+      throw new Error("Sessao expirada.");
+    }
+    return response;
+  });
+}
+
+async function responseError(response, fallback) {
+  try {
+    const data = await response.json();
+    return data.error || data.detail || fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 const api = {
   async getBootstrap(month) {
-    const response = await fetch(`/api/bootstrap?month=${encodeURIComponent(month)}`);
+    const response = await authFetch(`/api/bootstrap?month=${encodeURIComponent(month)}`);
     if (!response.ok) throw new Error("Falha ao carregar dashboard.");
     return response.json();
   },
   async saveSettings(payload) {
-    const response = await fetch("/api/settings", {
+    const response = await authFetch("/api/settings", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload)
     });
-    if (!response.ok) throw new Error((await response.json()).error || "Falha ao salvar configurações.");
+    if (!response.ok) throw new Error(await responseError(response, "Falha ao salvar configurações."));
     return response.json();
   },
   async createTransaction(payload) {
-    const response = await fetch("/api/transactions", {
+    const response = await authFetch("/api/transactions", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload)
     });
-    if (!response.ok) throw new Error((await response.json()).error || "Falha ao salvar lançamento.");
+    if (!response.ok) throw new Error(await responseError(response, "Falha ao salvar lançamento."));
     return response.json();
   },
   async createCategory(payload) {
-    const response = await fetch("/api/categories", {
+    const response = await authFetch("/api/categories", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload)
     });
-    if (!response.ok) throw new Error((await response.json()).error || "Falha ao criar categoria.");
+    if (!response.ok) throw new Error(await responseError(response, "Falha ao criar categoria."));
     return response.json();
   },
   async createCard(payload) {
-    const response = await fetch("/api/cards", {
+    const response = await authFetch("/api/cards", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload)
     });
-    if (!response.ok) throw new Error((await response.json()).error || "Falha ao criar cartão.");
+    if (!response.ok) throw new Error(await responseError(response, "Falha ao criar cartão."));
     return response.json();
   },
   async createInstallment(cardId, payload) {
-    const response = await fetch(`/api/cards/${cardId}/installments`, {
+    const response = await authFetch(`/api/cards/${cardId}/installments`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload)
     });
-    if (!response.ok) throw new Error((await response.json()).error || "Falha ao salvar compra parcelada.");
+    if (!response.ok) throw new Error(await responseError(response, "Falha ao salvar compra parcelada."));
     return response.json();
   },
   async deleteTransaction(id) {
-    const response = await fetch(`/api/transactions/${id}`, { method: "DELETE" });
-    if (!response.ok) throw new Error((await response.json()).error || "Falha ao remover lançamento.");
+    const response = await authFetch(`/api/transactions/${id}`, { method: "DELETE" });
+    if (!response.ok) throw new Error(await responseError(response, "Falha ao remover lançamento."));
+    return response.json();
+  },
+  async exportCsv(month) {
+    const response = await authFetch(`/api/export/csv?month=${encodeURIComponent(month)}`);
+    if (!response.ok) throw new Error(await responseError(response, "Falha ao exportar CSV."));
+    return response;
+  },
+  async getSuggestions(month) {
+    const response = await authFetch(`/api/transactions/suggestions?month=${encodeURIComponent(month)}`);
+    if (!response.ok) throw new Error(await responseError(response, "Falha ao carregar recorrências."));
     return response.json();
   }
 };
@@ -60,12 +101,31 @@ const state = {
   month: new Date().toISOString().slice(0, 7),
   chartType: localStorage.getItem("rf_chart_type") || "doughnut",
   data: null,
-  search: ""
+  search: "",
+  filtersOpen: false,
+  filters: {
+    type: "",
+    categoryId: "",
+    minAmount: "",
+    maxAmount: "",
+    paymentMethod: ""
+  }
 };
 
 const monthPicker = document.getElementById("monthPicker");
 const chartTypeSelect = document.getElementById("chartTypeSelect");
 const transactionSearch = document.getElementById("transactionSearch");
+const toggleFiltersBtn = document.getElementById("toggleFiltersBtn");
+const advancedFilters = document.getElementById("advancedFilters");
+const filterType = document.getElementById("filterType");
+const filterCategory = document.getElementById("filterCategory");
+const filterMinAmount = document.getElementById("filterMinAmount");
+const filterMaxAmount = document.getElementById("filterMaxAmount");
+const filterPayment = document.getElementById("filterPayment");
+const clearFiltersBtn = document.getElementById("clearFiltersBtn");
+const alertsBanner = document.getElementById("alertsBanner");
+const recurringSuggestions = document.getElementById("recurringSuggestions");
+const exportCsvBtn = document.getElementById("exportCsvBtn");
 const cardsStack = document.getElementById("cardsStack");
 const transactionsList = document.getElementById("transactionsList");
 const modalBackdrop = document.getElementById("modalBackdrop");
@@ -93,6 +153,23 @@ function escapeHtml(value) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
+}
+
+function addMonths(monthKey, offset) {
+  const [year, month] = monthKey.split("-").map(Number);
+  const date = new Date(year, month - 1 + offset, 1);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function scoreDelta(current, previous) {
+  if (previous === undefined || previous === null || current === previous) return { icon: "→", label: "estável" };
+  return current > previous
+    ? { icon: "↑", label: `+${current - previous} vs mês anterior` }
+    : { icon: "↓", label: `${current - previous} vs mês anterior` };
+}
+
+function alertStorageKey(alert) {
+  return `rf_alert_closed_${state.month}_${alert.type}_${alert.category}_${alert.message}`;
 }
 
 function showToast(message) {
@@ -134,6 +211,87 @@ function fillCardSelect(select, includeEmpty = false) {
   select.innerHTML = options.join("");
 }
 
+function populateAdvancedFilters() {
+  const currentCategory = filterCategory.value;
+  const currentPayment = filterPayment.value;
+  const categories = state.data?.categories || [];
+  filterCategory.innerHTML = [
+    `<option value="">Todas</option>`,
+    ...categories.map((category) => (
+      `<option value="${category.id}">${escapeHtml(category.icon)} ${escapeHtml(category.name)}</option>`
+    ))
+  ].join("");
+  filterCategory.value = currentCategory;
+
+  const payments = [...new Set((state.data?.transactions || []).map((item) => item.payment_method).filter(Boolean))].sort();
+  filterPayment.innerHTML = [
+    `<option value="">Todos</option>`,
+    ...payments.map((payment) => `<option value="${escapeHtml(payment)}">${escapeHtml(payment)}</option>`)
+  ].join("");
+  filterPayment.value = currentPayment;
+}
+
+function filtersAreActive() {
+  return Boolean(
+    state.search.trim() ||
+    state.filters.type ||
+    state.filters.categoryId ||
+    state.filters.minAmount ||
+    state.filters.maxAmount ||
+    state.filters.paymentMethod
+  );
+}
+
+function renderScore() {
+  const score = state.data?.score;
+  if (!score) return;
+  const previousScore = state.data?.previousScore?.score;
+  const delta = scoreDelta(score.score, previousScore);
+  const scoreValue = document.getElementById("scoreValue");
+  const scoreLabel = document.getElementById("scoreLabel");
+  const scoreDeltaEl = document.getElementById("scoreDelta");
+  const scoreCard = document.getElementById("scoreCard");
+  const scoreTooltip = document.getElementById("scoreTooltip");
+
+  scoreValue.textContent = String(score.score);
+  scoreValue.style.color = score.color;
+  scoreLabel.textContent = score.label;
+  scoreDeltaEl.textContent = `${delta.icon} ${delta.label}`;
+  scoreDeltaEl.className = `score-delta ${delta.icon === "↑" ? "up" : delta.icon === "↓" ? "down" : ""}`;
+  scoreCard.style.setProperty("--score-color", score.color);
+  scoreTooltip.innerHTML = `
+    <strong>Composição do score</strong>
+    <span>Gastos: ${score.breakdown.gastos}</span>
+    <span>Consistência: +${score.breakdown.consistencia}</span>
+    <span>Reservas: +${score.breakdown.reservas}</span>
+    <span>Cartões: ${score.breakdown.cartoes}</span>
+  `;
+}
+
+function renderAlerts() {
+  const alerts = (state.data?.alerts || []).filter((alert) => !sessionStorage.getItem(alertStorageKey(alert)));
+  if (!alerts.length) {
+    alertsBanner.classList.add("hidden");
+    alertsBanner.innerHTML = "";
+    return;
+  }
+
+  alertsBanner.classList.remove("hidden");
+  alertsBanner.innerHTML = alerts.map((alert, index) => {
+    const icon = alert.type === "danger" ? "!" : alert.type === "warning" ? "?" : "i";
+    return `
+      <article class="alert-item ${alert.type}" data-alert-index="${index}">
+        <span class="alert-icon">${icon}</span>
+        <div>
+          <strong>${escapeHtml(alert.category)}</strong>
+          <p>${escapeHtml(alert.message)}</p>
+        </div>
+        <button type="button" class="alert-close" data-close-alert="${index}" aria-label="Fechar alerta">×</button>
+      </article>
+    `;
+  }).join("");
+}
+
 function renderKpis() {
   const { dashboard } = state.data;
   document.getElementById("salaryValue").textContent = formatBRL(state.data.settings.monthly_income);
@@ -143,6 +301,7 @@ function renderKpis() {
   document.getElementById("summaryInflow").textContent = formatBRL(dashboard.inflow);
   document.getElementById("summaryOutflow").textContent = formatBRL(dashboard.outflow);
   document.getElementById("summaryNet").textContent = formatBRL(dashboard.balance);
+  renderScore();
 }
 
 function renderCategoryChart() {
@@ -194,7 +353,12 @@ function renderCategoryChart() {
 function renderTrendChart() {
   const canvas = document.getElementById("trendChart");
   const trend = state.data.dashboard.monthlyTrend;
+  const monthlyIncome = Number(state.data.settings.monthly_income || 0);
+  const goalLine = monthlyIncome * 0.7;
   if (trendChart) trendChart.destroy();
+
+  const scroll = canvas.closest(".trend-scroll");
+  if (scroll) canvas.style.minWidth = trend.length > 6 ? `${trend.length * 92}px` : "100%";
 
   trendChart = new Chart(canvas, {
     type: "line",
@@ -216,6 +380,15 @@ function renderTrendChart() {
           backgroundColor: "rgba(17,17,17,.08)",
           fill: false,
           tension: 0.34
+        },
+        {
+          label: "Meta de gastos",
+          data: trend.map(() => goalLine),
+          borderColor: "#eb4d43",
+          borderDash: [8, 6],
+          pointRadius: 0,
+          fill: false,
+          tension: 0
         }
       ]
     },
@@ -223,7 +396,35 @@ function renderTrendChart() {
       responsive: true,
       maintainAspectRatio: false,
       plugins: {
-        legend: { labels: { color: "#111" } }
+        legend: { labels: { color: "#111" } },
+        tooltip: {
+          callbacks: {
+            title(items) {
+              return trend[items[0].dataIndex]?.label || "";
+            },
+            label(context) {
+              const item = trend[context.dataIndex];
+              if (context.dataset.label === "Meta de gastos") return `Meta: ${formatBRL(goalLine)}`;
+              const previous = trend[context.dataIndex - 1];
+              const diff = previous ? item.net - previous.net : 0;
+              return [
+                `Entradas: ${formatBRL(item.inflow)}`,
+                `Saídas: ${formatBRL(item.outflow)}`,
+                `Saldo: ${formatBRL(item.net)}`,
+                previous ? `Vs mês anterior: ${diff >= 0 ? "+" : ""}${formatBRL(diff)}` : "Primeiro mês da série"
+              ];
+            }
+          }
+        }
+      },
+      onClick(event) {
+        const points = trendChart.getElementsAtEventForMode(event, "nearest", { intersect: true }, true);
+        if (!points.length) return;
+        const selected = trend[points[0].index];
+        if (!selected?.month) return;
+        state.month = selected.month;
+        monthPicker.value = selected.month;
+        loadDashboard();
       },
       scales: {
         y: {
@@ -243,7 +444,14 @@ function renderTransactions() {
   const query = state.search.trim().toLowerCase();
   const transactions = state.data.transactions.filter((item) => {
     const haystack = `${item.title} ${item.category_name || ""} ${item.payment_method || ""}`.toLowerCase();
-    return !query || haystack.includes(query);
+    const amount = Number(item.amount || 0);
+    const matchesSearch = !query || haystack.includes(query);
+    const matchesType = !state.filters.type || item.type === state.filters.type;
+    const matchesCategory = !state.filters.categoryId || String(item.category_id || "") === state.filters.categoryId;
+    const matchesPayment = !state.filters.paymentMethod || item.payment_method === state.filters.paymentMethod;
+    const matchesMin = !state.filters.minAmount || amount >= Number(state.filters.minAmount);
+    const matchesMax = !state.filters.maxAmount || amount <= Number(state.filters.maxAmount);
+    return matchesSearch && matchesType && matchesCategory && matchesPayment && matchesMin && matchesMax;
   });
 
   if (!transactions.length) {
@@ -261,6 +469,9 @@ function renderTransactions() {
     const billing = item.billing_month
       ? `<span class="tag">Fatura ${escapeHtml(item.billing_month)}</span>`
       : "";
+    const recurring = item.is_recurring
+      ? `<span class="tag">Recorrente</span>`
+      : "";
 
     return `
       <article class="transaction-item">
@@ -277,6 +488,7 @@ function renderTransactions() {
           ${card}
           ${billing}
           ${installment}
+          ${recurring}
         </div>
 
         <div class="transaction-actions">
@@ -285,6 +497,67 @@ function renderTransactions() {
       </article>
     `;
   }).join("");
+}
+
+function renderRecurringSuggestions() {
+  const suggestions = state.data?.recurringSuggestions || [];
+  if (!suggestions.length) {
+    recurringSuggestions.classList.add("hidden");
+    recurringSuggestions.innerHTML = "";
+    return;
+  }
+
+  recurringSuggestions.classList.remove("hidden");
+  recurringSuggestions.innerHTML = `
+    <div>
+      <strong>💡 ${suggestions.length} lançamentos recorrentes aguardando confirmação para este mês</strong>
+      <p>${suggestions.slice(0, 3).map((item) => escapeHtml(item.title)).join(", ")}</p>
+    </div>
+    <div class="recurring-actions">
+      <button type="button" class="action-btn action-primary" id="acceptRecurringBtn">Aceitar todos</button>
+      <button type="button" class="action-btn" id="viewRecurringBtn">Ver detalhes</button>
+    </div>
+  `;
+}
+
+async function acceptRecurringSuggestions() {
+  const suggestions = state.data?.recurringSuggestions || [];
+  if (!suggestions.length) return;
+
+  for (const suggestion of suggestions) {
+    await api.createTransaction({
+      title: suggestion.title,
+      amount: Number(suggestion.amount),
+      type: suggestion.type || "expense",
+      categoryId: suggestion.category_id ? Number(suggestion.category_id) : null,
+      paymentMethod: suggestion.payment_method || "pix",
+      transactionDate: suggestion.suggested_date,
+      notes: suggestion.notes || "",
+      cardId: suggestion.card_id ? Number(suggestion.card_id) : null,
+      billingMonth: suggestion.card_id ? state.month : null,
+      isRecurring: true,
+      recurrenceType: suggestion.recurrence_type || "monthly",
+      recurrenceDay: Number(suggestion.recurrence_day || suggestion.suggested_date.slice(-2))
+    });
+  }
+
+  await loadDashboard();
+  showToast("Recorrências confirmadas.");
+}
+
+async function downloadCsv() {
+  const response = await api.exportCsv(state.month);
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  const disposition = response.headers.get("Content-Disposition") || "";
+  const match = disposition.match(/filename="([^"]+)"/);
+  link.href = url;
+  link.download = match?.[1] || `financeiro-${state.month}.csv`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
 }
 
 function renderCards() {
@@ -368,7 +641,10 @@ function openModal(kind) {
           transactionDate: formData.get("transactionDate"),
           notes: formData.get("notes"),
           cardId: formData.get("cardId") ? Number(formData.get("cardId")) : null,
-          billingMonth: formData.get("paymentMethod") === "crédito" && formData.get("cardId") ? state.month : null
+          billingMonth: formData.get("paymentMethod") === "crédito" && formData.get("cardId") ? state.month : null,
+          isRecurring: formData.get("isRecurring") === "on",
+          recurrenceType: formData.get("isRecurring") === "on" ? "monthly" : null,
+          recurrenceDay: formData.get("isRecurring") === "on" ? Number(formData.get("recurrenceDay")) : null
         });
       }
     },
@@ -436,11 +712,21 @@ function openModal(kind) {
     const categorySelect = modalForm.querySelector("#transactionCategorySelect");
     const cardSelect = modalForm.querySelector("#transactionCardSelect");
     modalForm.elements.transactionDate.value = currentDayISO();
+    modalForm.elements.recurrenceDay.value = String(Number(modalForm.elements.transactionDate.value.slice(-2)));
+    modalForm.elements.recurrenceDay.disabled = true;
     fillCategorySelect(categorySelect, getExpenseCategories());
     fillCardSelect(cardSelect, true);
 
     typeSelect.addEventListener("change", () => {
       fillCategorySelect(categorySelect, typeSelect.value === "income" ? getIncomeCategories() : getExpenseCategories());
+    });
+    modalForm.elements.isRecurring.addEventListener("change", () => {
+      modalForm.elements.recurrenceDay.disabled = !modalForm.elements.isRecurring.checked;
+    });
+    modalForm.elements.transactionDate.addEventListener("change", () => {
+      if (!modalForm.elements.isRecurring.checked) {
+        modalForm.elements.recurrenceDay.value = String(Number(modalForm.elements.transactionDate.value.slice(-2)));
+      }
     });
   }
 
@@ -474,9 +760,12 @@ function closeModal() {
 
 async function loadDashboard() {
   state.data = await api.getBootstrap(state.month);
+  populateAdvancedFilters();
+  renderAlerts();
   renderKpis();
   renderCategoryChart();
   renderTrendChart();
+  renderRecurringSuggestions();
   renderTransactions();
   renderCards();
 }
@@ -497,10 +786,34 @@ document.addEventListener("click", async (event) => {
       showToast(error.message);
     }
   }
+
+  const alertClose = event.target.closest("[data-close-alert]");
+  if (alertClose) {
+    const visibleAlerts = (state.data?.alerts || []).filter((alert) => !sessionStorage.getItem(alertStorageKey(alert)));
+    const alert = visibleAlerts[Number(alertClose.dataset.closeAlert)];
+    if (alert) sessionStorage.setItem(alertStorageKey(alert), "1");
+    renderAlerts();
+  }
+
+  if (event.target.closest("#acceptRecurringBtn")) {
+    try {
+      await acceptRecurringSuggestions();
+    } catch (error) {
+      showToast(error.message);
+    }
+  }
+
+  if (event.target.closest("#viewRecurringBtn")) {
+    const details = (state.data?.recurringSuggestions || [])
+      .map((item) => `${item.title} em ${item.suggested_date}`)
+      .join(" • ");
+    showToast(details || "Sem recorrências pendentes.");
+  }
 });
 
 monthPicker.value = state.month;
 chartTypeSelect.value = state.chartType;
+clearFiltersBtn.classList.add("hidden-soft");
 
 monthPicker.addEventListener("change", async (event) => {
   state.month = event.target.value;
@@ -516,6 +829,46 @@ chartTypeSelect.addEventListener("change", () => {
 transactionSearch.addEventListener("input", () => {
   state.search = transactionSearch.value;
   renderTransactions();
+});
+
+toggleFiltersBtn.addEventListener("click", () => {
+  state.filtersOpen = !state.filtersOpen;
+  advancedFilters.classList.toggle("collapsed", !state.filtersOpen);
+});
+
+[filterType, filterCategory, filterMinAmount, filterMaxAmount, filterPayment].forEach((control) => {
+  control.addEventListener("input", () => {
+    state.filters = {
+      type: filterType.value,
+      categoryId: filterCategory.value,
+      minAmount: filterMinAmount.value,
+      maxAmount: filterMaxAmount.value,
+      paymentMethod: filterPayment.value
+    };
+    clearFiltersBtn.classList.toggle("hidden-soft", !filtersAreActive());
+    renderTransactions();
+  });
+});
+
+clearFiltersBtn.addEventListener("click", () => {
+  transactionSearch.value = "";
+  filterType.value = "";
+  filterCategory.value = "";
+  filterMinAmount.value = "";
+  filterMaxAmount.value = "";
+  filterPayment.value = "";
+  state.search = "";
+  state.filters = { type: "", categoryId: "", minAmount: "", maxAmount: "", paymentMethod: "" };
+  clearFiltersBtn.classList.add("hidden-soft");
+  renderTransactions();
+});
+
+exportCsvBtn.addEventListener("click", async () => {
+  try {
+    await downloadCsv();
+  } catch (error) {
+    showToast(error.message);
+  }
 });
 
 hideBannerBtn.addEventListener("click", () => {

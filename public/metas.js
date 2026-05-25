@@ -1,16 +1,47 @@
+const token = sessionStorage.getItem("rf_token");
+if (!token) {
+  window.location.href = "/login";
+  throw new Error("Autenticacao necessaria.");
+}
+
+function authFetch(url, options = {}) {
+  const headers = {
+    ...(options.headers || {}),
+    Authorization: `Bearer ${token}`
+  };
+
+  return fetch(url, { ...options, headers }).then((response) => {
+    if (response.status === 401) {
+      sessionStorage.removeItem("rf_token");
+      window.location.href = "/login";
+      throw new Error("Sessao expirada.");
+    }
+    return response;
+  });
+}
+
+async function responseError(response, fallback) {
+  try {
+    const data = await response.json();
+    return data.error || data.detail || fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 const api = {
   async getGoals(month) {
-    const response = await fetch(`/api/goals?month=${encodeURIComponent(month)}`);
+    const response = await authFetch(`/api/goals?month=${encodeURIComponent(month)}`);
     if (!response.ok) throw new Error("Falha ao carregar metas.");
     return response.json();
   },
   async saveGoal(dailyGoal) {
-    const response = await fetch("/api/settings", {
+    const response = await authFetch("/api/settings", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ dailyGoal })
     });
-    if (!response.ok) throw new Error((await response.json()).error || "Falha ao salvar meta.");
+    if (!response.ok) throw new Error(await responseError(response, "Falha ao salvar meta."));
     return response.json();
   }
 };
@@ -105,12 +136,12 @@ function renderCalendar() {
     let ringRest = "var(--remaining)";
 
     if (day.spent > state.data.dailyGoal) {
-      ringColor = "var(--red)";
+      ringColor = "var(--exceeded)";
       ringRest = "rgba(255,255,255,.08)";
     }
 
     if (day.spent === 0) {
-      ringColor = "rgba(255,255,255,.2)";
+      ringColor = "var(--remaining)";
     }
 
     return `

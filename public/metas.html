@@ -6,6 +6,7 @@
   <title>Metas Diárias | Ritmo Financeiro Pro</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <script src="theme.js"></script>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="metas.css" />
 </head>
@@ -22,6 +23,7 @@
 
       <div class="hero-actions">
         <a class="ghost-btn" href="/">Voltar ao dashboard</a>
+        <a class="ghost-btn" href="/cartoes">Cartões</a>
       </div>
     </section>
 
@@ -37,12 +39,19 @@
 
         <div class="top-actions">
           <input class="month-input" type="month" id="goalMonthPicker" />
+          <button type="button" id="themeToggle" class="theme-toggle-btn" aria-label="Alternar tema">
+            <span class="theme-icon">☀</span>
+          </button>
+          <a href="/perfil" class="profile-link" aria-label="Perfil">
+            <span class="avatar-mini"><img src="img/no-logon-profile.svg" width="20" height="20" alt=""></span>
+          </a>
         </div>
       </header>
 
       <nav class="tabs">
         <a href="/">Geral</a>
         <a class="active" href="/metas">Metas diárias</a>
+        <a href="/cartoes">Cartões</a>
       </nav>
 
       <section class="goal-layout">
@@ -78,7 +87,7 @@
           <div class="legend">
             <span><i class="dot used"></i>Dentro da meta</span>
             <span><i class="dot exceeded"></i>Acima da meta</span>
-            <span><i class="dot remaining"></i>Sem uso ou espaço restante</span>
+            <span><i class="dot remaining"></i>Sem gastos registrados</span>
           </div>
 
           <div class="today-panel">
