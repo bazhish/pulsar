@@ -1,4 +1,4 @@
-const token = sessionStorage.getItem("rf_token");
+﻿const token = sessionStorage.getItem("rf_token");
 if (!token) {
   window.location.href = "/login";
   throw new Error("Autenticacao necessaria.");
@@ -93,34 +93,11 @@ const pinSubmitBtn = document.getElementById("pinSubmitBtn");
 const pinHelp = document.getElementById("pinHelp");
 const pinError = document.getElementById("pinError");
 const pinDots = document.getElementById("pinDots");
-const toast = document.getElementById("toast");
-
-function formatBRL(value) {
-  return new Intl.NumberFormat("pt-BR", {
-    style: "currency",
-    currency: "BRL"
-  }).format(Number(value || 0));
-}
-
-function escapeHtml(value) {
-  return String(value ?? "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
-}
 
 function formatMonthLabel(monthKey) {
   const names = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
   const [year, month] = monthKey.split("-").map(Number);
   return `${names[month - 1]}/${String(year).slice(2)}`;
-}
-
-function showToast(message) {
-  toast.textContent = message;
-  toast.classList.remove("hidden");
-  setTimeout(() => toast.classList.add("hidden"), 2600);
 }
 
 function unlockKey(cardId) {
@@ -155,7 +132,7 @@ function clearUnlock(cardId) {
 }
 
 function maskValue(unlock, value) {
-  return unlock ? formatBRL(value) : "R$ ••••••";
+  return unlock ? RFUtils.formatBRL(value) : "R$ â€¢â€¢â€¢â€¢â€¢â€¢";
 }
 
 function renderSummary() {
@@ -177,18 +154,18 @@ function renderSummary() {
 
   const summaryLimit = document.getElementById("summaryLimit");
   const summaryLimitNote = document.getElementById("summaryLimitNote");
-  summaryLimit.textContent = allUnlocked ? formatBRL(totalLimit) : "R$ ••••••";
+  summaryLimit.textContent = allUnlocked ? RFUtils.formatBRL(totalLimit) : "R$ â€¢â€¢â€¢â€¢â€¢â€¢";
   summaryLimit.classList.toggle("masked", !allUnlocked);
   summaryLimitNote.textContent = allUnlocked
-    ? "Todos os cartões desta sessão estão desbloqueados."
-    : "Desbloqueie todos os cartões para ver o total.";
-  document.getElementById("summaryInvoice").textContent = formatBRL(totalInvoice);
+    ? "Todos os cartÃµes desta sessÃ£o estÃ£o desbloqueados."
+    : "Desbloqueie todos os cartÃµes para ver o total.";
+  document.getElementById("summaryInvoice").textContent = RFUtils.formatBRL(totalInvoice);
   document.getElementById("summaryInstallments").textContent = String(totalInstallments);
 }
 
 function renderCards() {
   if (!state.cards.length) {
-    cardsGrid.innerHTML = `<div class="empty-state">Nenhum cartão cadastrado ainda.</div>`;
+    cardsGrid.innerHTML = `<div class="empty-state">Nenhum cartÃ£o cadastrado ainda.</div>`;
     renderSummary();
     return;
   }
@@ -208,8 +185,8 @@ function renderCard(card) {
     <article class="bank-card ${unlocked ? "unlocked-card" : ""}" data-card-id="${card.id}">
       <div class="card-head">
         <div>
-          <div class="card-title"><span class="chip-mark"><span></span><span></span></span>${escapeHtml(card.name)}</div>
-          <div class="card-brand-line">${escapeHtml(card.brand)} • •••• ${escapeHtml(card.last_four)}</div>
+          <div class="card-title"><span class="chip-mark"><span></span><span></span></span>${RFUtils.escapeHtml(card.name)}</div>
+          <div class="card-brand-line">${RFUtils.escapeHtml(card.brand)} â€¢ â€¢â€¢â€¢â€¢ ${RFUtils.escapeHtml(card.last_four)}</div>
         </div>
         ${unlocked ? `<button class="action-btn action-secondary" type="button" data-lock-card="${card.id}">Bloquear</button>` : ""}
       </div>
@@ -224,7 +201,7 @@ function renderCard(card) {
           <strong class="${metricsClass}">${maskValue(unlocked, data.invoice)}</strong>
         </div>
         <div class="metric">
-          <span class="metric-label">Disponível</span>
+          <span class="metric-label">DisponÃ­vel</span>
           <strong class="${metricsClass}">${maskValue(unlocked, data.available_credit)}</strong>
         </div>
       </div>
@@ -248,7 +225,7 @@ function renderUnlockedBody(cardId, data, activeTab) {
     <div class="card-tabs">
       <button class="tab-btn ${activeTab === "installments" ? "active" : ""}" type="button" data-card-tab="${cardId}" data-tab="installments">Parcelas</button>
       <button class="tab-btn ${activeTab === "invoices" ? "active" : ""}" type="button" data-card-tab="${cardId}" data-tab="invoices">Faturas futuras</button>
-      <button class="tab-btn ${activeTab === "history" ? "active" : ""}" type="button" data-card-tab="${cardId}" data-tab="history">Histórico</button>
+      <button class="tab-btn ${activeTab === "history" ? "active" : ""}" type="button" data-card-tab="${cardId}" data-tab="history">HistÃ³rico</button>
     </div>
     ${activeTab === "installments" ? renderInstallments(data.active_installments || []) : ""}
     ${activeTab === "invoices" ? renderInvoices(data.upcoming_invoices || []) : ""}
@@ -258,7 +235,7 @@ function renderUnlockedBody(cardId, data, activeTab) {
 
 function renderInstallments(items) {
   if (!items.length) {
-    return `<div class="empty-state">Sem parcelas ativas neste mês.</div>`;
+    return `<div class="empty-state">Sem parcelas ativas neste mÃªs.</div>`;
   }
 
   return `
@@ -266,11 +243,11 @@ function renderInstallments(items) {
       ${items.map((item) => `
         <div class="installment-row">
           <div>
-            <strong>${escapeHtml(item.title)}</strong>
-            <div class="installment-meta">${escapeHtml(item.installment_label)} • ${item.remaining} restantes</div>
+            <strong>${RFUtils.escapeHtml(item.title)}</strong>
+            <div class="installment-meta">${RFUtils.escapeHtml(item.installment_label)} â€¢ ${item.remaining} restantes</div>
             <div class="progress-track"><div class="progress-fill" style="--progress:${Number(item.progress || 0)}%;"></div></div>
           </div>
-          <strong>${formatBRL(item.amount)}</strong>
+          <strong>${RFUtils.formatBRL(item.amount)}</strong>
         </div>
       `).join("")}
     </div>
@@ -281,13 +258,13 @@ function renderInvoices(items) {
   const visible = items.slice(0, 6);
   return `
     <div class="tab-panel">
-      <p class="invoice-note">Estes valores consideram apenas parcelas já cadastradas. Novos gastos não estão incluídos.</p>
+      <p class="invoice-note">Estes valores consideram apenas parcelas jÃ¡ cadastradas. Novos gastos nÃ£o estÃ£o incluÃ­dos.</p>
       <div class="invoice-table">
-        <div class="invoice-row head"><span>Mês</span><span>Total projetado</span><span>Parcelas</span></div>
+        <div class="invoice-row head"><span>MÃªs</span><span>Total projetado</span><span>Parcelas</span></div>
         ${visible.map((item) => `
           <div class="invoice-row">
             <span>${formatMonthLabel(item.month)}</span>
-            <strong>${formatBRL(item.projected_total)}</strong>
+            <strong>${RFUtils.formatBRL(item.projected_total)}</strong>
             <span>${item.installments_count} itens</span>
           </div>
         `).join("")}
@@ -306,18 +283,18 @@ function renderHistory(cardId, items) {
     <div class="tab-panel">
       <div class="history-filter">
         <label>
-          <span class="metric-label">Filtrar período</span>
-          <input type="month" value="${escapeHtml(filterMonth)}" data-history-month="${cardId}" />
+          <span class="metric-label">Filtrar perÃ­odo</span>
+          <input type="month" value="${RFUtils.escapeHtml(filterMonth)}" data-history-month="${cardId}" />
         </label>
         ${filterMonth ? `<button class="action-btn action-secondary" type="button" data-clear-history-month="${cardId}">Limpar</button>` : ""}
       </div>
       ${filtered.length ? filtered.map((item) => `
         <div class="history-row">
           <div>
-            <strong>${escapeHtml(item.title)}</strong>
-            <div class="history-meta">${escapeHtml(item.category_name || "Sem categoria")} • ${escapeHtml(item.transaction_date)}</div>
+            <strong>${RFUtils.escapeHtml(item.title)}</strong>
+            <div class="history-meta">${RFUtils.escapeHtml(item.category_name || "Sem categoria")} â€¢ ${RFUtils.escapeHtml(item.transaction_date)}</div>
           </div>
-          <strong>${formatBRL(item.amount)}</strong>
+          <strong>${RFUtils.formatBRL(item.amount)}</strong>
         </div>
       `).join("") : `<div class="empty-state">Nenhuma compra encontrada para esse filtro.</div>`}
     </div>
@@ -338,13 +315,13 @@ function openPinModal(card) {
 function renderPinModal() {
   const card = state.modalCard;
   const creating = state.modalMode === "create";
-  pinModalTitle.textContent = `${creating ? "Definir PIN" : "PIN do cartão"} ${card.name}`;
+  pinModalTitle.textContent = `${creating ? "Definir PIN" : "PIN do cartÃ£o"} ${card.name}`;
   pinModalDescription.textContent = creating
-    ? "Crie um PIN numérico de 4 a 6 dígitos. Ele será salvo protegido por hash."
+    ? "Crie um PIN numÃ©rico de 4 a 6 dÃ­gitos. Ele serÃ¡ salvo protegido por hash."
     : "Digite o PIN para desbloquear os dados por 15 minutos.";
   pinInputLabel.textContent = creating ? "Novo PIN" : "PIN";
   pinSubmitBtn.textContent = creating ? "Definir PIN" : "Confirmar";
-  pinHelp.textContent = creating ? "Use apenas números. Não use datas óbvias." : "3 tentativas restantes";
+  pinHelp.textContent = creating ? "Use apenas nÃºmeros. NÃ£o use datas Ã³bvias." : "3 tentativas restantes";
   confirmPinField.classList.toggle("hidden", !creating);
   confirmPinInput.required = creating;
   updatePinDots();
@@ -373,7 +350,7 @@ async function handlePinSubmit(event) {
   pinError.classList.add("hidden");
 
   if (!/^\d{4,6}$/.test(pin)) {
-    showPinError("PIN deve conter de 4 a 6 dígitos.");
+    showPinError("PIN deve conter de 4 a 6 dÃ­gitos.");
     return;
   }
 
@@ -391,7 +368,7 @@ async function handlePinSubmit(event) {
       pinInput.value = "";
       confirmPinInput.value = "";
       renderPinModal();
-      showToast("PIN definido. Agora desbloqueie o cartão.");
+      RFUtils.showToast("PIN definido. Agora desbloqueie o cartÃ£o.");
       return;
     }
 
@@ -399,12 +376,12 @@ async function handlePinSubmit(event) {
     storeUnlock(card.id, data);
     closePinModal();
     await loadCards();
-    showToast("Cartão desbloqueado por 15 minutos.");
+    RFUtils.showToast("CartÃ£o desbloqueado por 15 minutos.");
   } catch (error) {
     if (error.attemptsRemaining !== null && error.attemptsRemaining !== undefined) {
       pinHelp.textContent = `${error.attemptsRemaining} tentativas restantes`;
     }
-    showPinError(error.message || "Não foi possível validar o PIN.");
+    showPinError(error.message || "NÃ£o foi possÃ­vel validar o PIN.");
   }
 }
 
@@ -477,5 +454,5 @@ setInterval(() => {
 }, 60000);
 
 loadCards().catch((error) => {
-  showToast(error.message);
+  RFUtils.showToast(error.message);
 });

@@ -7,166 +7,213 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <script src="theme.js"></script>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="tokens.css" />
+  <link rel="stylesheet" href="layout.css" />
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <div class="page-bg"></div>
+  <div class="app-layout">
+    <aside class="sidebar">
+      <a class="sidebar-brand" href="/" aria-label="Ritmo Financeiro Pro">
+        <span class="brand-mark">RF</span>
+        <span class="brand-text"><strong>Ritmo Financeiro</strong><span>Controle pessoal</span></span>
+      </a>
+      <nav class="sidebar-nav" aria-label="Principal">
+        <a class="sidebar-link" href="/"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 12l9-8 9 8"/><path d="M5 10v10h14V10"/><path d="M9 20v-6h6v6"/></svg></span>Dashboard</a>
+        <a class="sidebar-link" href="/metas"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M8 2v4M16 2v4M3 10h18"/><rect x="3" y="5" width="18" height="16" rx="2"/></svg></span>Metas</a>
+        <a class="sidebar-link" href="/cartoes"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18"/></svg></span>Cartoes</a>
+        <a class="sidebar-link active" href="/perfil"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 14.5-4 16 0"/></svg></span>Perfil</a>
+      </nav>
+      <div class="sidebar-footer">
+        <a class="sidebar-user" href="/perfil">
+          <span class="avatar"><img src="img/no-logon-profile.svg" width="23" height="23" alt=""></span>
+          <span>Minha conta</span>
+        </a>
+        <button type="button" id="themeToggle" class="theme-toggle-btn" aria-label="Alternar tema">
+          <span class="theme-icon">&#9728;</span>
+        </button>
+      </div>
+    </aside>
 
-  <main class="dashboard-shell profile-shell">
-    <section class="dashboard-card profile-window">
-      <header class="topbar">
-        <div class="brand-block">
-          <div class="brand">Perfil</div>
-          <nav class="profile-nav">
-            <a href="/">Geral</a>
-            <a href="/metas">Metas diárias</a>
-            <a href="/cartoes">Cartões</a>
-          </nav>
-        </div>
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
 
-        <div class="topbar-right">
-          <button type="button" id="themeToggle" class="theme-toggle-btn" aria-label="Alternar tema">
-            <span class="theme-icon">☀</span>
-          </button>
-        </div>
+    <main class="main-content profile-shell">
+      <header class="app-header">
+        <a class="mobile-brand" href="/">
+          <span class="brand-mark">RF</span>
+          <span class="brand-text"><strong>Perfil</strong><span>Ritmo Pro</span></span>
+        </a>
+        <a class="header-user" href="/perfil" aria-label="Perfil">
+          <span class="avatar-mini"><img src="img/no-logon-profile.svg" width="20" height="20" alt=""></span>
+        </a>
       </header>
 
-      <section class="profile-layout">
-        <aside class="profile-card">
-          <div class="profile-avatar-large" id="profileAvatar">RF</div>
-          <h1 id="profileName">Seu perfil</h1>
-          <p id="profileEmail">--</p>
-        </aside>
+      <div class="page-content">
+        <section class="page-hero">
+          <span class="hero-badge">Conta</span>
+          <h1>Perfil</h1>
+          <p>Dados da conta, senha, preferencia visual e preview do resumo mensal.</p>
+        </section>
 
-        <div class="profile-panels">
-          <section class="profile-panel">
-            <div class="panel-head simple">
-              <div>
-                <h3>Dados básicos</h3>
-                <p>Atualize seu nome e a imagem usada no perfil.</p>
-              </div>
+        <section class="dashboard-card profile-window">
+          <header class="topbar">
+            <div class="brand-block">
+              <div class="brand">Perfil</div>
+              <nav class="profile-nav">
+                <a href="/">Geral</a>
+                <a href="/metas">Metas diarias</a>
+                <a href="/cartoes">Cartoes</a>
+                <a class="active" href="/perfil">Perfil</a>
+              </nav>
             </div>
+          </header>
 
-            <form class="modal-form" id="profileForm">
-              <label>
-                <span>Nome</span>
-                <input name="name" type="text" maxlength="100" required />
-              </label>
-              <label>
-                <span>E-mail</span>
-                <input name="email" type="email" readonly />
-              </label>
-              <label>
-                <span>URL do avatar</span>
-                <input name="avatar_url" type="url" maxlength="500" placeholder="https://..." />
-              </label>
-              <button class="submit-btn" type="submit">Salvar perfil</button>
-            </form>
-          </section>
+          <section class="profile-layout">
+            <aside class="profile-card">
+              <div class="profile-avatar-large" id="profileAvatar">RF</div>
+              <h1 id="profileName">Seu perfil</h1>
+              <p id="profileEmail">--</p>
+            </aside>
 
-          <section class="profile-panel">
-            <div class="panel-head simple">
-              <div>
-                <h3>Trocar senha</h3>
-                <p>Use uma senha com pelo menos 8 caracteres, 1 número e 1 letra maiúscula.</p>
-              </div>
+            <div class="profile-panels">
+              <section class="profile-panel">
+                <div class="panel-head simple">
+                  <div>
+                    <h3>Dados basicos</h3>
+                    <p>Nome, e-mail e imagem usada no perfil.</p>
+                  </div>
+                </div>
+
+                <form class="modal-form" id="profileForm">
+                  <label>
+                    <span>Nome</span>
+                    <input name="name" type="text" maxlength="100" required />
+                  </label>
+                  <label>
+                    <span>E-mail</span>
+                    <input name="email" type="email" readonly />
+                  </label>
+                  <label>
+                    <span>URL do avatar</span>
+                    <input name="avatar_url" type="url" maxlength="500" placeholder="https://..." />
+                  </label>
+                  <button class="submit-btn" type="submit">Salvar perfil</button>
+                </form>
+              </section>
+
+              <section class="profile-panel">
+                <div class="panel-head simple">
+                  <div>
+                    <h3>Trocar senha</h3>
+                    <p>Use uma senha com pelo menos 8 caracteres, 1 numero e 1 letra maiuscula.</p>
+                  </div>
+                </div>
+
+                <form class="modal-form" id="passwordForm">
+                  <label>
+                    <span>Senha atual</span>
+                    <input name="current_password" type="password" maxlength="72" required />
+                  </label>
+                  <div class="grid-2">
+                    <label>
+                      <span>Nova senha</span>
+                      <input name="new_password" type="password" maxlength="72" required />
+                    </label>
+                    <label>
+                      <span>Confirmar nova senha</span>
+                      <input name="confirm_password" type="password" maxlength="72" required />
+                    </label>
+                  </div>
+                  <button class="submit-btn" type="submit">Atualizar senha</button>
+                </form>
+              </section>
+
+              <section class="profile-panel profile-preferences">
+                <div>
+                  <h3>Aparencia</h3>
+                  <p>Preferencia salva neste navegador.</p>
+                </div>
+                <button type="button" class="theme-toggle-btn preference-toggle" data-theme-toggle aria-label="Alternar tema">
+                  <span class="theme-icon">&#9728;</span>
+                </button>
+              </section>
+
+              <section class="profile-panel monthly-summary-panel">
+                <div class="panel-head simple">
+                  <div>
+                    <h3>Resumo mensal</h3>
+                    <p>Preview local do resumo do mes atual.</p>
+                  </div>
+                  <label class="summary-toggle">
+                    <input id="monthlySummaryToggle" type="checkbox" />
+                    <span>Receber resumo mensal</span>
+                  </label>
+                </div>
+
+                <div class="monthly-preview-card" id="monthlyPreviewCard">
+                  <div>
+                    <span>Saldo previsto</span>
+                    <strong id="summaryBalancePreview">R$ 0,00</strong>
+                  </div>
+                  <div>
+                    <span>Ritmo Score</span>
+                    <strong id="summaryScorePreview">--</strong>
+                  </div>
+                  <div>
+                    <span>Top categorias</span>
+                    <p id="summaryCategoriesPreview">--</p>
+                  </div>
+                </div>
+
+                <button type="button" class="submit-btn" id="generateSummaryPreviewBtn">Gerar preview</button>
+              </section>
+
+              <section class="profile-stats">
+                <article class="kpi-card">
+                  <span class="kpi-label">Cadastro</span>
+                  <strong class="kpi-value" id="createdAtValue">--</strong>
+                  <small class="kpi-foot">Data de criacao da conta.</small>
+                </article>
+                <article class="kpi-card positive">
+                  <span class="kpi-label">Transacoes</span>
+                  <strong class="kpi-value" id="transactionsValue">0</strong>
+                  <small class="kpi-foot">Total registrado na conta.</small>
+                </article>
+                <article class="kpi-card balance">
+                  <span class="kpi-label">Categorias</span>
+                  <strong class="kpi-value" id="categoriesValue">0</strong>
+                  <small class="kpi-foot">Categorias disponiveis para uso.</small>
+                </article>
+              </section>
             </div>
-
-            <form class="modal-form" id="passwordForm">
-              <label>
-                <span>Senha atual</span>
-                <input name="current_password" type="password" maxlength="72" required />
-              </label>
-              <div class="grid-2">
-                <label>
-                  <span>Nova senha</span>
-                  <input name="new_password" type="password" maxlength="72" required />
-                </label>
-                <label>
-                  <span>Confirmar nova senha</span>
-                  <input name="confirm_password" type="password" maxlength="72" required />
-                </label>
-              </div>
-              <button class="submit-btn" type="submit">Atualizar senha</button>
-            </form>
           </section>
+        </section>
+      </div>
+    </main>
 
-          <section class="profile-panel profile-preferences">
-            <div>
-              <h3>Aparência</h3>
-              <p>Preferência salva neste navegador.</p>
-            </div>
-            <button type="button" class="theme-toggle-btn preference-toggle" data-theme-toggle aria-label="Alternar tema">
-              <span class="theme-icon">☀</span>
-            </button>
-          </section>
-
-          <section class="profile-panel monthly-summary-panel">
-            <div class="panel-head simple">
-              <div>
-                <h3>Resumo mensal</h3>
-                <p>Preview visual do resumo que seria enviado no fechamento do mês.</p>
-              </div>
-              <label class="summary-toggle">
-                <input id="monthlySummaryToggle" type="checkbox" />
-                <span>Receber resumo mensal</span>
-              </label>
-            </div>
-
-            <div class="monthly-preview-card" id="monthlyPreviewCard">
-              <div>
-                <span>Saldo previsto</span>
-                <strong id="summaryBalancePreview">R$ 0,00</strong>
-              </div>
-              <div>
-                <span>Ritmo Score</span>
-                <strong id="summaryScorePreview">--</strong>
-              </div>
-              <div>
-                <span>Top categorias</span>
-                <p id="summaryCategoriesPreview">--</p>
-              </div>
-            </div>
-
-            <button type="button" class="submit-btn" id="generateSummaryPreviewBtn">Gerar preview</button>
-          </section>
-
-          <section class="profile-stats">
-            <article class="kpi-card">
-              <span class="kpi-label">Cadastro</span>
-              <strong class="kpi-value" id="createdAtValue">--</strong>
-              <small class="kpi-foot">Data de criação da conta.</small>
-            </article>
-            <article class="kpi-card positive">
-              <span class="kpi-label">Transações</span>
-              <strong class="kpi-value" id="transactionsValue">0</strong>
-              <small class="kpi-foot">Total registrado na conta.</small>
-            </article>
-            <article class="kpi-card balance">
-              <span class="kpi-label">Categorias</span>
-              <strong class="kpi-value" id="categoriesValue">0</strong>
-              <small class="kpi-foot">Categorias disponíveis para uso.</small>
-            </article>
-          </section>
-        </div>
-      </section>
-    </section>
-  </main>
+    <nav class="bottom-nav" aria-label="Navegacao movel">
+      <a href="/"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 12l9-8 9 8"/><path d="M5 10v10h14V10"/><path d="M9 20v-6h6v6"/></svg></span>Dashboard</a>
+      <a href="/metas"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M8 2v4M16 2v4M3 10h18"/><rect x="3" y="5" width="18" height="16" rx="2"/></svg></span>Metas</a>
+      <a href="/cartoes"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18"/></svg></span>Cartoes</a>
+      <a class="active" href="/perfil"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 14.5-4 16 0"/></svg></span>Perfil</a>
+    </nav>
+  </div>
 
   <div class="modal-backdrop hidden" id="summaryPreviewBackdrop">
     <div class="modal-window summary-preview-modal" id="summaryPreviewModal">
       <div class="modal-head">
         <div>
           <h3>Preview do resumo mensal</h3>
-          <p>Simulação local com os dados do mês atual.</p>
+          <p>Simulacao local com os dados do mes atual.</p>
         </div>
-        <button class="close-btn" id="closeSummaryPreviewBtn" type="button">×</button>
+        <button class="close-btn" id="closeSummaryPreviewBtn" type="button">&times;</button>
       </div>
       <div class="summary-preview-content" id="summaryPreviewContent"></div>
     </div>
   </div>
 
+  <script src="utils.js"></script>
   <script src="perfil.js"></script>
 </body>
 </html>

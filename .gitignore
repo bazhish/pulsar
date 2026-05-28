@@ -7,3 +7,10 @@ data/
 *.log
 .agents/
 skills-lock.json
+requirements-lock.txt
+.coverage
+htmlcov/
+coverage.xml
+.ruff_cache/
+dist/
+build/

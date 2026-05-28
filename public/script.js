@@ -1,4 +1,4 @@
-const token = sessionStorage.getItem("rf_token");
+﻿const token = sessionStorage.getItem("rf_token");
 if (!token) {
   window.location.href = "/login";
   throw new Error("Autenticacao necessaria.");
@@ -41,7 +41,7 @@ const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload)
     });
-    if (!response.ok) throw new Error(await responseError(response, "Falha ao salvar configurações."));
+    if (!response.ok) throw new Error(await responseError(response, "Falha ao salvar configuraÃ§Ãµes."));
     return response.json();
   },
   async createTransaction(payload) {
@@ -50,7 +50,7 @@ const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload)
     });
-    if (!response.ok) throw new Error(await responseError(response, "Falha ao salvar lançamento."));
+    if (!response.ok) throw new Error(await responseError(response, "Falha ao salvar lanÃ§amento."));
     return response.json();
   },
   async createCategory(payload) {
@@ -68,7 +68,7 @@ const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload)
     });
-    if (!response.ok) throw new Error(await responseError(response, "Falha ao criar cartão."));
+    if (!response.ok) throw new Error(await responseError(response, "Falha ao criar cartÃ£o."));
     return response.json();
   },
   async createInstallment(cardId, payload) {
@@ -82,7 +82,7 @@ const api = {
   },
   async deleteTransaction(id) {
     const response = await authFetch(`/api/transactions/${id}`, { method: "DELETE" });
-    if (!response.ok) throw new Error(await responseError(response, "Falha ao remover lançamento."));
+    if (!response.ok) throw new Error(await responseError(response, "Falha ao remover lanÃ§amento."));
     return response.json();
   },
   async setRecurring(id, payload) {
@@ -91,7 +91,7 @@ const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload)
     });
-    if (!response.ok) throw new Error(await responseError(response, "Falha ao atualizar recorrência."));
+    if (!response.ok) throw new Error(await responseError(response, "Falha ao atualizar recorrÃªncia."));
     return response.json();
   },
   async exportCsv(month) {
@@ -106,7 +106,7 @@ const api = {
   },
   async getSuggestions(month) {
     const response = await authFetch(`/api/transactions/suggestions?month=${encodeURIComponent(month)}`);
-    if (!response.ok) throw new Error(await responseError(response, "Falha ao carregar recorrências."));
+    if (!response.ok) throw new Error(await responseError(response, "Falha ao carregar recorrÃªncias."));
     return response.json();
   }
 };
@@ -155,22 +155,6 @@ const hideBannerBtn = document.getElementById("hideBannerBtn");
 let categoryChart;
 let trendChart;
 
-function formatBRL(value) {
-  return new Intl.NumberFormat("pt-BR", {
-    style: "currency",
-    currency: "BRL"
-  }).format(Number(value || 0));
-}
-
-function escapeHtml(value) {
-  return String(value ?? "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
-}
-
 function addMonths(monthKey, offset) {
   const [year, month] = monthKey.split("-").map(Number);
   const date = new Date(year, month - 1 + offset, 1);
@@ -178,26 +162,14 @@ function addMonths(monthKey, offset) {
 }
 
 function scoreDelta(current, previous) {
-  if (previous === undefined || previous === null || current === previous) return { icon: "→", label: "estável" };
+  if (previous === undefined || previous === null || current === previous) return { icon: "â†’", label: "estÃ¡vel" };
   return current > previous
-    ? { icon: "↑", label: `+${current - previous} vs mês anterior` }
-    : { icon: "↓", label: `${current - previous} vs mês anterior` };
+    ? { icon: "â†‘", label: `+${current - previous} vs mÃªs anterior` }
+    : { icon: "â†“", label: `${current - previous} vs mÃªs anterior` };
 }
 
 function alertStorageKey(alert) {
   return `rf_alert_closed_${state.month}_${alert.type}_${alert.category}_${alert.message}`;
-}
-
-function showToast(message) {
-  const old = document.querySelector(".toast");
-  if (old) old.remove();
-
-  const toast = document.createElement("div");
-  toast.className = "toast";
-  toast.textContent = message;
-  document.body.appendChild(toast);
-
-  setTimeout(() => toast.remove(), 2600);
 }
 
 function currentDayISO() {
@@ -214,15 +186,15 @@ function getIncomeCategories() {
 
 function fillCategorySelect(select, categories) {
   select.innerHTML = categories.map((category) => (
-    `<option value="${category.id}">${escapeHtml(category.icon)} ${escapeHtml(category.name)}</option>`
+    `<option value="${category.id}">${RFUtils.escapeHtml(category.icon)} ${RFUtils.escapeHtml(category.name)}</option>`
   )).join("");
 }
 
 function fillCardSelect(select, includeEmpty = false) {
   const options = [];
-  if (includeEmpty) options.push(`<option value="">Sem cartão</option>`);
+  if (includeEmpty) options.push(`<option value="">Sem cartÃ£o</option>`);
   for (const card of state.data.cards) {
-    options.push(`<option value="${card.id}">${escapeHtml(card.name)} • ${escapeHtml(card.last_four)}</option>`);
+    options.push(`<option value="${card.id}">${RFUtils.escapeHtml(card.name)} â€¢ ${RFUtils.escapeHtml(card.last_four)}</option>`);
   }
   select.innerHTML = options.join("");
 }
@@ -234,7 +206,7 @@ function populateAdvancedFilters() {
   filterCategory.innerHTML = [
     `<option value="">Todas</option>`,
     ...categories.map((category) => (
-      `<option value="${category.id}">${escapeHtml(category.icon)} ${escapeHtml(category.name)}</option>`
+      `<option value="${category.id}">${RFUtils.escapeHtml(category.icon)} ${RFUtils.escapeHtml(category.name)}</option>`
     ))
   ].join("");
   filterCategory.value = currentCategory;
@@ -242,7 +214,7 @@ function populateAdvancedFilters() {
   const payments = [...new Set((state.data?.transactions || []).map((item) => item.payment_method).filter(Boolean))].sort();
   filterPayment.innerHTML = [
     `<option value="">Todos</option>`,
-    ...payments.map((payment) => `<option value="${escapeHtml(payment)}">${escapeHtml(payment)}</option>`)
+    ...payments.map((payment) => `<option value="${RFUtils.escapeHtml(payment)}">${RFUtils.escapeHtml(payment)}</option>`)
   ].join("");
   filterPayment.value = currentPayment;
 }
@@ -273,14 +245,14 @@ function renderScore() {
   scoreValue.style.color = score.color;
   scoreLabel.textContent = score.label;
   scoreDeltaEl.textContent = `${delta.icon} ${delta.label}`;
-  scoreDeltaEl.className = `score-delta ${delta.icon === "↑" ? "up" : delta.icon === "↓" ? "down" : ""}`;
+  scoreDeltaEl.className = `score-delta ${delta.icon === "â†‘" ? "up" : delta.icon === "â†“" ? "down" : ""}`;
   scoreCard.style.setProperty("--score-color", score.color);
   scoreTooltip.innerHTML = `
-    <strong>Composição do score</strong>
+    <strong>ComposiÃ§Ã£o do score</strong>
     <span>Gastos: ${score.breakdown.gastos}</span>
-    <span>Consistência: +${score.breakdown.consistencia}</span>
+    <span>ConsistÃªncia: +${score.breakdown.consistencia}</span>
     <span>Reservas: +${score.breakdown.reservas}</span>
-    <span>Cartões: ${score.breakdown.cartoes}</span>
+    <span>CartÃµes: ${score.breakdown.cartoes}</span>
   `;
 }
 
@@ -299,16 +271,16 @@ function renderAlerts() {
       <article class="alert-item ${alert.type}" data-alert-index="${index}">
         <span class="alert-icon">${icon}</span>
         <div>
-          <strong>${escapeHtml(alert.category)}</strong>
-          <p>${escapeHtml(alert.message)}</p>
+          <strong>${RFUtils.escapeHtml(alert.category)}</strong>
+          <p>${RFUtils.escapeHtml(alert.message)}</p>
         </div>
-        <button type="button" class="alert-close" data-close-alert="${index}" aria-label="Fechar alerta">×</button>
+        <button type="button" class="alert-close" data-close-alert="${index}" aria-label="Fechar alerta">Ã—</button>
       </article>
     `;
   }).join("");
   alertsBanner.innerHTML = `
     <div class="alerts-head">
-      <strong>${alerts.length} alerta${alerts.length > 1 ? "s" : ""} no mês</strong>
+      <strong>${alerts.length} alerta${alerts.length > 1 ? "s" : ""} no mÃªs</strong>
       <button type="button" class="alert-collapse" id="toggleAlertsCollapse" aria-label="Alternar alertas" aria-expanded="${!state.alertsCollapsed}">
         ${state.alertsCollapsed ? "+" : "-"}
       </button>
@@ -321,13 +293,13 @@ function renderAlerts() {
 
 function renderKpis() {
   const { dashboard } = state.data;
-  document.getElementById("salaryValue").textContent = formatBRL(state.data.settings.monthly_income);
-  document.getElementById("inflowValue").textContent = formatBRL(dashboard.inflow);
-  document.getElementById("outflowValue").textContent = formatBRL(dashboard.outflow);
-  document.getElementById("balanceValue").textContent = formatBRL(dashboard.balance);
-  document.getElementById("summaryInflow").textContent = formatBRL(dashboard.inflow);
-  document.getElementById("summaryOutflow").textContent = formatBRL(dashboard.outflow);
-  document.getElementById("summaryNet").textContent = formatBRL(dashboard.balance);
+  document.getElementById("salaryValue").textContent = RFUtils.formatBRL(state.data.settings.monthly_income);
+  document.getElementById("inflowValue").textContent = RFUtils.formatBRL(dashboard.inflow);
+  document.getElementById("outflowValue").textContent = RFUtils.formatBRL(dashboard.outflow);
+  document.getElementById("balanceValue").textContent = RFUtils.formatBRL(dashboard.balance);
+  document.getElementById("summaryInflow").textContent = RFUtils.formatBRL(dashboard.inflow);
+  document.getElementById("summaryOutflow").textContent = RFUtils.formatBRL(dashboard.outflow);
+  document.getElementById("summaryNet").textContent = RFUtils.formatBRL(dashboard.balance);
   renderScore();
 }
 
@@ -360,7 +332,7 @@ function renderCategoryChart() {
           callbacks: {
             label(context) {
               const value = context.raw || 0;
-              return `${context.label}: ${formatBRL(value)}`;
+              return `${context.label}: ${RFUtils.formatBRL(value)}`;
             }
           }
         }
@@ -369,7 +341,7 @@ function renderCategoryChart() {
         ? {
             y: {
               beginAtZero: true,
-              ticks: { callback: (value) => formatBRL(value) }
+              ticks: { callback: (value) => RFUtils.formatBRL(value) }
             }
           }
         : {}
@@ -401,7 +373,7 @@ function renderTrendChart() {
           tension: 0.34
         },
         {
-          label: "Saídas",
+          label: "SaÃ­das",
           data: trend.map((item) => item.outflow),
           borderColor: "#111111",
           backgroundColor: "rgba(17,17,17,.08)",
@@ -431,14 +403,14 @@ function renderTrendChart() {
             },
             label(context) {
               const item = trend[context.dataIndex];
-              if (context.dataset.label === "Meta de gastos") return `Meta: ${formatBRL(goalLine)}`;
+              if (context.dataset.label === "Meta de gastos") return `Meta: ${RFUtils.formatBRL(goalLine)}`;
               const previous = trend[context.dataIndex - 1];
               const diff = previous ? item.net - previous.net : 0;
               return [
-                `Entradas: ${formatBRL(item.inflow)}`,
-                `Saídas: ${formatBRL(item.outflow)}`,
-                `Saldo: ${formatBRL(item.net)}`,
-                previous ? `Vs mês anterior: ${diff >= 0 ? "+" : ""}${formatBRL(diff)}` : "Primeiro mês da série"
+                `Entradas: ${RFUtils.formatBRL(item.inflow)}`,
+                `SaÃ­das: ${RFUtils.formatBRL(item.outflow)}`,
+                `Saldo: ${RFUtils.formatBRL(item.net)}`,
+                previous ? `Vs mÃªs anterior: ${diff >= 0 ? "+" : ""}${RFUtils.formatBRL(diff)}` : "Primeiro mÃªs da sÃ©rie"
               ];
             }
           }
@@ -458,7 +430,7 @@ function renderTrendChart() {
           beginAtZero: true,
           ticks: {
             callback(value) {
-              return formatBRL(value);
+              return RFUtils.formatBRL(value);
             }
           }
         }
@@ -482,7 +454,7 @@ function renderTransactions() {
   });
 
   if (!transactions.length) {
-    transactionsList.innerHTML = `<div class="empty-state">Nenhum lançamento encontrado para esse filtro.</div>`;
+    transactionsList.innerHTML = `<div class="empty-state">Nenhum lanÃ§amento encontrado para esse filtro.</div>`;
     return;
   }
 
@@ -491,10 +463,10 @@ function renderTransactions() {
       ? `<span class="tag">Parcela ${item.installment_number}/${item.total_installments}</span>`
       : "";
     const card = item.card_name
-      ? `<span class="tag">${escapeHtml(item.card_name)}</span>`
+      ? `<span class="tag">${RFUtils.escapeHtml(item.card_name)}</span>`
       : "";
     const billing = item.billing_month
-      ? `<span class="tag">Fatura ${escapeHtml(item.billing_month)}</span>`
+      ? `<span class="tag">Fatura ${RFUtils.escapeHtml(item.billing_month)}</span>`
       : "";
     const recurring = item.is_recurring
       ? `<span class="tag">Recorrente</span>`
@@ -507,10 +479,10 @@ function renderTransactions() {
       <article class="transaction-item">
         <div class="transaction-top">
           <div>
-            <div class="transaction-title">${escapeHtml(item.title)}</div>
-            <div class="transaction-meta">${escapeHtml(item.category_name || "Sem categoria")} • ${escapeHtml(item.payment_method)} • ${escapeHtml(item.transaction_date)}</div>
+            <div class="transaction-title">${RFUtils.escapeHtml(item.title)}</div>
+            <div class="transaction-meta">${RFUtils.escapeHtml(item.category_name || "Sem categoria")} â€¢ ${RFUtils.escapeHtml(item.payment_method)} â€¢ ${RFUtils.escapeHtml(item.transaction_date)}</div>
           </div>
-          <div class="transaction-amount ${item.type}">${item.type === "income" ? "+" : "-"} ${formatBRL(item.amount)}</div>
+          <div class="transaction-amount ${item.type}">${item.type === "income" ? "+" : "-"} ${RFUtils.formatBRL(item.amount)}</div>
         </div>
 
         <div class="transaction-tags">
@@ -541,8 +513,8 @@ function renderRecurringSuggestions() {
   recurringSuggestions.classList.remove("hidden");
   recurringSuggestions.innerHTML = `
     <div>
-      <strong>💡 ${suggestions.length} lançamentos recorrentes aguardando confirmação para este mês</strong>
-      <p>${suggestions.slice(0, 3).map((item) => escapeHtml(item.title)).join(", ")}</p>
+      <strong>ðŸ’¡ ${suggestions.length} lanÃ§amentos recorrentes aguardando confirmaÃ§Ã£o para este mÃªs</strong>
+      <p>${suggestions.slice(0, 3).map((item) => RFUtils.escapeHtml(item.title)).join(", ")}</p>
     </div>
     <div class="recurring-actions">
       <button type="button" class="action-btn action-primary" id="acceptRecurringBtn">Aceitar todos</button>
@@ -573,7 +545,7 @@ async function acceptRecurringSuggestions() {
   }
 
   await loadDashboard();
-  showToast("Recorrências confirmadas.");
+  RFUtils.showToast("RecorrÃªncias confirmadas.");
 }
 
 async function downloadResponse(response, fallbackName) {
@@ -604,7 +576,7 @@ function renderCards() {
   const cards = state.data.cards;
 
   if (!cards.length) {
-    cardsStack.innerHTML = `<div class="empty-state">Nenhum cartão cadastrado.</div>`;
+    cardsStack.innerHTML = `<div class="empty-state">Nenhum cartÃ£o cadastrado.</div>`;
     return;
   }
 
@@ -613,37 +585,37 @@ function renderCards() {
       ? card.activeInstallments.map((item) => `
           <div class="card-installment">
             <div>
-              <strong>${escapeHtml(item.title)}</strong>
-              <div class="card-footnote">${escapeHtml(item.installmentLabel)} • ${item.remaining} restantes</div>
+              <strong>${RFUtils.escapeHtml(item.title)}</strong>
+              <div class="card-footnote">${RFUtils.escapeHtml(item.installmentLabel)} â€¢ ${item.remaining} restantes</div>
             </div>
-            <strong>${formatBRL(item.amount)}</strong>
+            <strong>${RFUtils.formatBRL(item.amount)}</strong>
           </div>
         `).join("")
-      : `<div class="card-footnote">Sem parcelas ativas neste período.</div>`;
+      : `<div class="card-footnote">Sem parcelas ativas neste perÃ­odo.</div>`;
 
     return `
-      <article class="card-item" style="background:${escapeHtml(card.color)};">
+      <article class="card-item" style="background:${RFUtils.escapeHtml(card.color)};">
         <div class="card-top">
           <div>
-            <div class="card-name">${escapeHtml(card.name)}</div>
-            <div class="card-subtitle">${escapeHtml(card.brand)} • final ${escapeHtml(card.last_four)}</div>
+            <div class="card-name">${RFUtils.escapeHtml(card.name)}</div>
+            <div class="card-subtitle">${RFUtils.escapeHtml(card.brand)} â€¢ final ${RFUtils.escapeHtml(card.last_four)}</div>
           </div>
-          <div class="metric-chip">Fatura ${escapeHtml(state.month)}</div>
+          <div class="metric-chip">Fatura ${RFUtils.escapeHtml(state.month)}</div>
         </div>
 
         <div class="card-meta" style="margin-top:16px;">
           <div>
             <div class="card-footnote">Fatura atual</div>
-            <div class="card-limit">${formatBRL(card.invoice)}</div>
+            <div class="card-limit">${RFUtils.formatBRL(card.invoice)}</div>
           </div>
           <div>
-            <div class="card-footnote">Disponível</div>
-            <div class="card-limit">${formatBRL(card.availableCredit)}</div>
+            <div class="card-footnote">DisponÃ­vel</div>
+            <div class="card-limit">${RFUtils.formatBRL(card.availableCredit)}</div>
           </div>
         </div>
 
         <div class="transaction-tags" style="margin-top:16px;">
-          <span class="metric-chip">Limite ${formatBRL(card.credit_limit)}</span>
+          <span class="metric-chip">Limite ${RFUtils.formatBRL(card.credit_limit)}</span>
           <span class="metric-chip">${card.activeInstallmentsCount} compras parceladas</span>
           <span class="metric-chip">Fecha dia ${card.closing_day}</span>
           <span class="metric-chip">Vence dia ${card.due_day}</span>
@@ -660,16 +632,16 @@ function renderCards() {
 function openModal(kind) {
   const templates = {
     salaryModal: {
-      title: "Definir salário base",
-      subtitle: "Esse valor entra como base fixa no cálculo do saldo.",
+      title: "Definir salÃ¡rio base",
+      subtitle: "Esse valor entra como base fixa no cÃ¡lculo do saldo.",
       templateId: "salaryTemplate",
       onSubmit: async (formData) => {
         await api.saveSettings({ monthlyIncome: Number(formData.get("monthlyIncome")) });
       }
     },
     transactionModal: {
-      title: "Novo lançamento",
-      subtitle: "Entrada ou despesa comum. Para parcelamento, use a ação específica.",
+      title: "Novo lanÃ§amento",
+      subtitle: "Entrada ou despesa comum. Para parcelamento, use a aÃ§Ã£o especÃ­fica.",
       templateId: "transactionTemplate",
       onSubmit: async (formData) => {
         await api.createTransaction({
@@ -681,7 +653,7 @@ function openModal(kind) {
           transactionDate: formData.get("transactionDate"),
           notes: formData.get("notes"),
           cardId: formData.get("cardId") ? Number(formData.get("cardId")) : null,
-          billingMonth: formData.get("paymentMethod") === "crédito" && formData.get("cardId") ? state.month : null,
+          billingMonth: formData.get("paymentMethod") === "crÃ©dito" && formData.get("cardId") ? state.month : null,
           isRecurring: formData.get("isRecurring") === "on",
           recurrenceType: formData.get("isRecurring") === "on" ? "monthly" : null,
           recurrenceDay: formData.get("isRecurring") === "on" ? Number(formData.get("recurrenceDay")) : null
@@ -690,7 +662,7 @@ function openModal(kind) {
     },
     categoryModal: {
       title: "Nova categoria",
-      subtitle: "Amplie as categorias sem mexer no código da interface.",
+      subtitle: "Amplie as categorias sem mexer no cÃ³digo da interface.",
       templateId: "categoryTemplate",
       onSubmit: async (formData) => {
         await api.createCategory({
@@ -702,7 +674,7 @@ function openModal(kind) {
       }
     },
     cardModal: {
-      title: "Novo cartão",
+      title: "Novo cartÃ£o",
       subtitle: "Cadastre limite, fechamento e vencimento.",
       templateId: "cardTemplate",
       onSubmit: async (formData) => {
@@ -785,9 +757,9 @@ function openModal(kind) {
       await config.onSubmit(formData);
       closeModal();
       await loadDashboard();
-      showToast("Salvo com sucesso.");
+      RFUtils.showToast("Salvo com sucesso.");
     } catch (error) {
-      showToast(error.message);
+      RFUtils.showToast(error.message);
     }
   };
 }
@@ -821,9 +793,9 @@ document.addEventListener("click", async (event) => {
     try {
       await api.deleteTransaction(deleteBtn.dataset.deleteId);
       await loadDashboard();
-      showToast("Lançamento removido.");
+      RFUtils.showToast("LanÃ§amento removido.");
     } catch (error) {
-      showToast(error.message);
+      RFUtils.showToast(error.message);
     }
   }
 
@@ -849,9 +821,9 @@ document.addEventListener("click", async (event) => {
         recurrence_day: Number(recurringToggle.dataset.recurrenceDay || 1)
       });
       await loadDashboard();
-      showToast("Recorrência ativada.");
+      RFUtils.showToast("RecorrÃªncia ativada.");
     } catch (error) {
-      showToast(error.message);
+      RFUtils.showToast(error.message);
     }
   }
 
@@ -859,15 +831,15 @@ document.addEventListener("click", async (event) => {
     try {
       await acceptRecurringSuggestions();
     } catch (error) {
-      showToast(error.message);
+      RFUtils.showToast(error.message);
     }
   }
 
   if (event.target.closest("#viewRecurringBtn")) {
     const details = (state.data?.recurringSuggestions || [])
       .map((item) => `${item.title} em ${item.suggested_date}`)
-      .join(" • ");
-    showToast(details || "Sem recorrências pendentes.");
+      .join(" â€¢ ");
+    RFUtils.showToast(details || "Sem recorrÃªncias pendentes.");
   }
 });
 
@@ -927,7 +899,7 @@ exportCsvBtn.addEventListener("click", async () => {
   try {
     await downloadCsv();
   } catch (error) {
-    showToast(error.message);
+    RFUtils.showToast(error.message);
   }
 });
 
@@ -935,7 +907,7 @@ exportPdfBtn.addEventListener("click", async () => {
   try {
     await downloadPdf();
   } catch (error) {
-    showToast(error.message);
+    RFUtils.showToast(error.message);
   }
 });
 
@@ -946,5 +918,5 @@ hideBannerBtn.addEventListener("click", () => {
 closeModalBtn.addEventListener("click", closeModal);
 
 loadDashboard().catch((error) => {
-  showToast(error.message);
+  RFUtils.showToast(error.message);
 });

@@ -1,4 +1,4 @@
-const token = sessionStorage.getItem("rf_token");
+﻿const token = sessionStorage.getItem("rf_token");
 if (!token) {
   window.location.href = "/login";
   throw new Error("Autenticacao necessaria.");
@@ -47,7 +47,7 @@ const api = {
 };
 
 const monthNames = [
-  "janeiro", "fevereiro", "março", "abril", "maio", "junho",
+  "janeiro", "fevereiro", "marÃ§o", "abril", "maio", "junho",
   "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"
 ];
 
@@ -70,25 +70,6 @@ const goalSummaryTitle = document.getElementById("goalSummaryTitle");
 const goalSummaryDescription = document.getElementById("goalSummaryDescription");
 const latestDaysList = document.getElementById("latestDaysList");
 
-function formatBRL(value) {
-  return new Intl.NumberFormat("pt-BR", {
-    style: "currency",
-    currency: "BRL"
-  }).format(Number(value || 0));
-}
-
-function showToast(message) {
-  const old = document.querySelector(".toast");
-  if (old) old.remove();
-
-  const toast = document.createElement("div");
-  toast.className = "toast";
-  toast.textContent = message;
-  document.body.appendChild(toast);
-
-  setTimeout(() => toast.remove(), 2600);
-}
-
 function getFirstWeekday(monthKey) {
   const [year, month] = monthKey.split("-").map(Number);
   return new Date(year, month - 1, 1).getDay();
@@ -108,13 +89,13 @@ function renderSelectedDay() {
   selectedDateLabel.textContent = `${day} de ${monthNames[month - 1]}`;
   selectedDateDescription.textContent =
     state.selectedDay.spent > state.data.dailyGoal
-      ? "Esse dia passou da meta. O círculo ficou vermelho porque o gasto ultrapassou o limite definido."
+      ? "Esse dia passou da meta. O cÃ­rculo ficou vermelho porque o gasto ultrapassou o limite definido."
       : state.selectedDay.spent === 0
         ? "Nenhuma despesa registrada nesse dia."
         : "Esse dia ficou dentro da meta estabelecida.";
-  selectedGoalValue.textContent = formatBRL(state.data.dailyGoal);
-  selectedSpentValue.textContent = formatBRL(state.selectedDay.spent);
-  selectedRemainingValue.textContent = formatBRL(state.selectedDay.remaining);
+  selectedGoalValue.textContent = RFUtils.formatBRL(state.data.dailyGoal);
+  selectedSpentValue.textContent = RFUtils.formatBRL(state.selectedDay.spent);
+  selectedRemainingValue.textContent = RFUtils.formatBRL(state.selectedDay.remaining);
 }
 
 function highlightSelectedNode() {
@@ -134,6 +115,8 @@ function renderCalendar() {
     const isFuture = state.month === currentMonth && day.day > currentDay;
     let ringColor = "var(--used)";
     let ringRest = "var(--remaining)";
+    const progress = Math.min(day.progress, 100);
+    const dash = Math.max(0, Math.min(195, progress * 1.95)).toFixed(2);
 
     if (day.spent > state.data.dailyGoal) {
       ringColor = "var(--exceeded)";
@@ -149,9 +132,13 @@ function renderCalendar() {
         <button
           class="day-node ${isFuture ? "future" : ""}"
           data-day="${day.day}"
-          style="--progress:${Math.min(day.progress, 100)}; --ring-color:${ringColor}; --ring-rest:${ringRest};"
+          style="--progress:${progress}; --dash:${dash}; --ring-color:${ringColor}; --ring-rest:${ringRest};"
           type="button"
         >
+          <svg viewBox="0 0 74 74" focusable="false" aria-hidden="true">
+            <circle class="ring-track" cx="37" cy="37" r="31"></circle>
+            <circle class="ring-progress" cx="37" cy="37" r="31"></circle>
+          </svg>
           <span class="day-number">${day.day}</span>
         </button>
       </div>
@@ -173,7 +160,7 @@ function renderSummary() {
   const zeroDays = state.data.days.filter((day) => day.spent === 0).length;
 
   goalSummaryTitle.textContent = `${okDays} dias dentro da meta`;
-  goalSummaryDescription.textContent = `${overDays} dias passaram da meta e ${zeroDays} dias não tiveram despesa registrada.`;
+  goalSummaryDescription.textContent = `${overDays} dias passaram da meta e ${zeroDays} dias nÃ£o tiveram despesa registrada.`;
 
   const latest = state.data.days
     .filter((day) => day.spent > 0)
@@ -190,11 +177,11 @@ function renderSummary() {
               <strong>${item.day} de ${monthNames[Number(state.month.slice(5, 7)) - 1]}</strong>
               <small>${over ? "Acima da meta" : "Dentro da meta"}</small>
             </div>
-            <b class="${over ? "status-over" : "status-ok"}">${formatBRL(item.spent)}</b>
+            <b class="${over ? "status-over" : "status-ok"}">${RFUtils.formatBRL(item.spent)}</b>
           </div>
         `;
       }).join("")
-    : `<div class="latest-item"><div><strong>Sem gastos</strong><small>Nada lançado ainda.</small></div><b>--</b></div>`;
+    : `<div class="latest-item"><div><strong>Sem gastos</strong><small>Nada lanÃ§ado ainda.</small></div><b>--</b></div>`;
 }
 
 async function loadGoals() {
@@ -216,17 +203,17 @@ saveGoalBtn.addEventListener("click", async () => {
   try {
     const value = Number(dailyGoalInput.value);
     if (!(value > 0)) {
-      showToast("Digite uma meta diária válida.");
+      RFUtils.showToast("Digite uma meta diÃ¡ria vÃ¡lida.");
       return;
     }
     await api.saveGoal(value);
     await loadGoals();
-    showToast("Meta atualizada.");
+    RFUtils.showToast("Meta atualizada.");
   } catch (error) {
-    showToast(error.message);
+    RFUtils.showToast(error.message);
   }
 });
 
 loadGoals().catch((error) => {
-  showToast(error.message);
+  RFUtils.showToast(error.message);
 });

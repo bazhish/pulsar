@@ -1,28 +1,35 @@
-FROM python:3.12-slim
+FROM python:3.12-slim AS deps
 
-WORKDIR /app
+WORKDIR /deps
+COPY requirements*.txt ./
+RUN if [ -f requirements-lock.txt ]; then \
+      pip install --no-cache-dir --user -r requirements-lock.txt; \
+    else \
+      pip install --no-cache-dir --user -r requirements.txt; \
+    fi
 
-# System dependencies required by psycopg2 and the container healthcheck.
+FROM python:3.12-slim AS runtime
+
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl \
-    gcc \
-    libpq-dev \
+    curl libpq5 \
     && rm -rf /var/lib/apt/lists/*
 
-# Python dependencies.
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN groupadd -r appuser && useradd -r -g appuser -d /app appuser
 
-# Application code.
-COPY . .
+WORKDIR /app
+COPY --from=deps /root/.local /home/appuser/.local
+COPY --chown=appuser:appuser . .
+RUN mkdir -p data && chown appuser:appuser data
 
-# Supabase is the production database, but keeping data/ avoids local path issues.
-RUN mkdir -p data
-
+USER appuser
+ENV PATH="/home/appuser/.local/bin:$PATH"
 ENV PORT=8000
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
 EXPOSE $PORT
 
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
   CMD curl -f http://localhost:${PORT}/api/health || exit 1
 
-CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port ${PORT}"]
+CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port ${PORT} --workers 2"]

@@ -1,4 +1,4 @@
-const token = sessionStorage.getItem("rf_token");
+﻿const token = sessionStorage.getItem("rf_token");
 if (!token) {
   window.location.href = "/login";
   throw new Error("Autenticacao necessaria.");
@@ -37,7 +37,7 @@ const api = {
   },
   async stats() {
     const response = await authFetch("/api/auth/stats");
-    if (!response.ok) throw new Error(await responseError(response, "Falha ao carregar estatísticas."));
+    if (!response.ok) throw new Error(await responseError(response, "Falha ao carregar estatÃ­sticas."));
     return response.json();
   },
   async updateProfile(payload) {
@@ -64,7 +64,7 @@ const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload)
     });
-    if (!response.ok) throw new Error(await responseError(response, "Falha ao salvar preferência."));
+    if (!response.ok) throw new Error(await responseError(response, "Falha ao salvar preferÃªncia."));
     return response.json();
   },
   async bootstrap(month) {
@@ -90,32 +90,6 @@ const generateSummaryPreviewBtn = document.getElementById("generateSummaryPrevie
 const summaryPreviewBackdrop = document.getElementById("summaryPreviewBackdrop");
 const closeSummaryPreviewBtn = document.getElementById("closeSummaryPreviewBtn");
 const summaryPreviewContent = document.getElementById("summaryPreviewContent");
-
-function showToast(message) {
-  const old = document.querySelector(".toast");
-  if (old) old.remove();
-  const toast = document.createElement("div");
-  toast.className = "toast";
-  toast.textContent = message;
-  document.body.appendChild(toast);
-  setTimeout(() => toast.remove(), 2600);
-}
-
-function formatBRL(value) {
-  return new Intl.NumberFormat("pt-BR", {
-    style: "currency",
-    currency: "BRL"
-  }).format(Number(value || 0));
-}
-
-function escapeHtml(value) {
-  return String(value ?? "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
-}
 
 function initials(name) {
   return String(name || "RF")
@@ -159,11 +133,11 @@ function renderMonthlySummary(data) {
   state.summaryData = data;
   const dashboard = data.dashboard;
   const topCategories = (dashboard.categoryBreakdown || []).slice(0, 3);
-  document.getElementById("summaryBalancePreview").textContent = formatBRL(dashboard.balance);
-  document.getElementById("summaryScorePreview").textContent = `${data.score.score} • ${data.score.label}`;
+  document.getElementById("summaryBalancePreview").textContent = RFUtils.formatBRL(dashboard.balance);
+  document.getElementById("summaryScorePreview").textContent = `${data.score.score} â€¢ ${data.score.label}`;
   document.getElementById("summaryCategoriesPreview").textContent = topCategories.length
-    ? topCategories.map((category) => `${category.name} (${formatBRL(category.total)})`).join(", ")
-    : "Sem despesas no mês";
+    ? topCategories.map((category) => `${category.name} (${RFUtils.formatBRL(category.total)})`).join(", ")
+    : "Sem despesas no mÃªs";
 }
 
 function openSummaryPreview() {
@@ -174,28 +148,28 @@ function openSummaryPreview() {
   summaryPreviewContent.innerHTML = `
     <section class="monthly-preview-card expanded">
       <div>
-        <span>Saldo do mês</span>
-        <strong>${formatBRL(dashboard.balance)}</strong>
+        <span>Saldo do mÃªs</span>
+        <strong>${RFUtils.formatBRL(dashboard.balance)}</strong>
       </div>
       <div>
         <span>Entradas</span>
-        <strong>${formatBRL(dashboard.inflow)}</strong>
+        <strong>${RFUtils.formatBRL(dashboard.inflow)}</strong>
       </div>
       <div>
-        <span>Saídas</span>
-        <strong>${formatBRL(dashboard.outflow)}</strong>
+        <span>SaÃ­das</span>
+        <strong>${RFUtils.formatBRL(dashboard.outflow)}</strong>
       </div>
       <div>
         <span>Ritmo Score</span>
-        <strong>${data.score.score} • ${escapeHtml(data.score.label)}</strong>
+        <strong>${data.score.score} â€¢ ${RFUtils.escapeHtml(data.score.label)}</strong>
       </div>
     </section>
     <div class="summary-email-body">
       <h4>Top categorias</h4>
       ${
         topCategories.length
-          ? topCategories.map((category) => `<p>${escapeHtml(category.name)}: ${formatBRL(category.total)}</p>`).join("")
-          : "<p>Sem despesas registradas neste mês.</p>"
+          ? topCategories.map((category) => `<p>${RFUtils.escapeHtml(category.name)}: ${RFUtils.formatBRL(category.total)}</p>`).join("")
+          : "<p>Sem despesas registradas neste mÃªs.</p>"
       }
     </div>
   `;
@@ -219,9 +193,9 @@ profileForm.addEventListener("submit", async (event) => {
     };
     const user = await api.updateProfile(payload);
     renderUser(user);
-    showToast("Perfil atualizado.");
+    RFUtils.showToast("Perfil atualizado.");
   } catch (error) {
-    showToast(error.message);
+    RFUtils.showToast(error.message);
   }
 });
 
@@ -232,12 +206,12 @@ passwordForm.addEventListener("submit", async (event) => {
   const confirmPassword = passwordForm.elements.confirm_password.value;
 
   if (!passwordIsStrong(newPassword)) {
-    showToast("A nova senha precisa ter 8 caracteres, 1 número e 1 letra maiúscula.");
+    RFUtils.showToast("A nova senha precisa ter 8 caracteres, 1 nÃºmero e 1 letra maiÃºscula.");
     return;
   }
 
   if (newPassword !== confirmPassword) {
-    showToast("A confirmação da senha não confere.");
+    RFUtils.showToast("A confirmaÃ§Ã£o da senha nÃ£o confere.");
     return;
   }
 
@@ -247,9 +221,9 @@ passwordForm.addEventListener("submit", async (event) => {
       new_password: newPassword
     });
     passwordForm.reset();
-    showToast("Senha atualizada.");
+    RFUtils.showToast("Senha atualizada.");
   } catch (error) {
-    showToast(error.message);
+    RFUtils.showToast(error.message);
   }
 });
 
@@ -257,10 +231,10 @@ monthlySummaryToggle.addEventListener("change", async () => {
   try {
     const user = await api.savePreference({ send_monthly_summary: monthlySummaryToggle.checked });
     renderUser(user);
-    showToast("Preferência salva.");
+    RFUtils.showToast("PreferÃªncia salva.");
   } catch (error) {
     monthlySummaryToggle.checked = !monthlySummaryToggle.checked;
-    showToast(error.message);
+    RFUtils.showToast(error.message);
   }
 });
 
@@ -277,5 +251,5 @@ Promise.all([api.me(), api.stats(), api.bootstrap(state.month)])
     renderMonthlySummary(summary);
   })
   .catch((error) => {
-    showToast(error.message);
+    RFUtils.showToast(error.message);
   });
