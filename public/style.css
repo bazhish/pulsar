@@ -433,6 +433,26 @@ button {
   margin-top: 24px;
 }
 
+.alerts-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.alerts-list {
+  display: grid;
+  gap: 10px;
+  max-height: 420px;
+  overflow: hidden;
+  transition: max-height .24s ease, opacity .2s ease;
+}
+
+.alerts-list.collapsed {
+  max-height: 0;
+  opacity: 0;
+}
+
 .alert-item {
   display: grid;
   grid-template-columns: auto 1fr auto;
@@ -471,6 +491,16 @@ button {
   border-radius: 50%;
   background: rgba(0,0,0,.08);
   color: var(--theme-text-primary);
+  font-weight: 900;
+}
+
+.alert-collapse {
+  width: 34px;
+  height: 34px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--theme-bg-panel-dark);
+  color: #fff;
   font-weight: 900;
 }
 
@@ -790,6 +820,9 @@ button {
 
 .transaction-actions {
   margin-top: 14px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
 }
 
 .link-btn {
@@ -798,6 +831,10 @@ button {
   color: #c24033;
   font-weight: 700;
   padding: 0;
+}
+
+.link-btn.neutral {
+  color: var(--theme-text-primary);
 }
 
 .card-item {

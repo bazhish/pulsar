@@ -85,9 +85,23 @@ const api = {
     if (!response.ok) throw new Error(await responseError(response, "Falha ao remover lançamento."));
     return response.json();
   },
+  async setRecurring(id, payload) {
+    const response = await authFetch(`/api/transactions/${id}/set-recurring`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+    if (!response.ok) throw new Error(await responseError(response, "Falha ao atualizar recorrência."));
+    return response.json();
+  },
   async exportCsv(month) {
     const response = await authFetch(`/api/export/csv?month=${encodeURIComponent(month)}`);
     if (!response.ok) throw new Error(await responseError(response, "Falha ao exportar CSV."));
+    return response;
+  },
+  async exportPdf(month) {
+    const response = await authFetch(`/api/export/pdf?month=${encodeURIComponent(month)}`);
+    if (!response.ok) throw new Error(await responseError(response, "Falha ao exportar PDF."));
     return response;
   },
   async getSuggestions(month) {
@@ -103,6 +117,7 @@ const state = {
   data: null,
   search: "",
   filtersOpen: false,
+  alertsCollapsed: false,
   filters: {
     type: "",
     categoryId: "",
@@ -126,6 +141,7 @@ const clearFiltersBtn = document.getElementById("clearFiltersBtn");
 const alertsBanner = document.getElementById("alertsBanner");
 const recurringSuggestions = document.getElementById("recurringSuggestions");
 const exportCsvBtn = document.getElementById("exportCsvBtn");
+const exportPdfBtn = document.getElementById("exportPdfBtn");
 const cardsStack = document.getElementById("cardsStack");
 const transactionsList = document.getElementById("transactionsList");
 const modalBackdrop = document.getElementById("modalBackdrop");
@@ -277,7 +293,7 @@ function renderAlerts() {
   }
 
   alertsBanner.classList.remove("hidden");
-  alertsBanner.innerHTML = alerts.map((alert, index) => {
+  const alertItems = alerts.map((alert, index) => {
     const icon = alert.type === "danger" ? "!" : alert.type === "warning" ? "?" : "i";
     return `
       <article class="alert-item ${alert.type}" data-alert-index="${index}">
@@ -290,6 +306,17 @@ function renderAlerts() {
       </article>
     `;
   }).join("");
+  alertsBanner.innerHTML = `
+    <div class="alerts-head">
+      <strong>${alerts.length} alerta${alerts.length > 1 ? "s" : ""} no mês</strong>
+      <button type="button" class="alert-collapse" id="toggleAlertsCollapse" aria-label="Alternar alertas" aria-expanded="${!state.alertsCollapsed}">
+        ${state.alertsCollapsed ? "+" : "-"}
+      </button>
+    </div>
+    <div class="alerts-list ${state.alertsCollapsed ? "collapsed" : ""}">
+      ${alertItems}
+    </div>
+  `;
 }
 
 function renderKpis() {
@@ -472,6 +499,9 @@ function renderTransactions() {
     const recurring = item.is_recurring
       ? `<span class="tag">Recorrente</span>`
       : "";
+    const recurringAction = !item.is_recurring && !item.installment_group
+      ? `<button class="link-btn neutral" type="button" data-set-recurring-id="${item.id}" data-recurrence-day="${Number(String(item.transaction_date).slice(-2)) || 1}">Repetir mensalmente</button>`
+      : "";
 
     return `
       <article class="transaction-item">
@@ -492,6 +522,7 @@ function renderTransactions() {
         </div>
 
         <div class="transaction-actions">
+          ${recurringAction}
           <button class="link-btn" type="button" data-delete-id="${item.id}">Excluir</button>
         </div>
       </article>
@@ -545,19 +576,28 @@ async function acceptRecurringSuggestions() {
   showToast("Recorrências confirmadas.");
 }
 
-async function downloadCsv() {
-  const response = await api.exportCsv(state.month);
+async function downloadResponse(response, fallbackName) {
   const blob = await response.blob();
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   const disposition = response.headers.get("Content-Disposition") || "";
   const match = disposition.match(/filename="([^"]+)"/);
   link.href = url;
-  link.download = match?.[1] || `financeiro-${state.month}.csv`;
+  link.download = match?.[1] || fallbackName;
   document.body.appendChild(link);
   link.click();
   link.remove();
   URL.revokeObjectURL(url);
+}
+
+async function downloadCsv() {
+  const response = await api.exportCsv(state.month);
+  await downloadResponse(response, `financeiro-${state.month}.csv`);
+}
+
+async function downloadPdf() {
+  const response = await api.exportPdf(state.month);
+  await downloadResponse(response, `financeiro-${state.month}.pdf`);
 }
 
 function renderCards() {
@@ -795,6 +835,26 @@ document.addEventListener("click", async (event) => {
     renderAlerts();
   }
 
+  if (event.target.closest("#toggleAlertsCollapse")) {
+    state.alertsCollapsed = !state.alertsCollapsed;
+    renderAlerts();
+  }
+
+  const recurringToggle = event.target.closest("[data-set-recurring-id]");
+  if (recurringToggle) {
+    try {
+      await api.setRecurring(recurringToggle.dataset.setRecurringId, {
+        is_recurring: true,
+        recurrence_type: "monthly",
+        recurrence_day: Number(recurringToggle.dataset.recurrenceDay || 1)
+      });
+      await loadDashboard();
+      showToast("Recorrência ativada.");
+    } catch (error) {
+      showToast(error.message);
+    }
+  }
+
   if (event.target.closest("#acceptRecurringBtn")) {
     try {
       await acceptRecurringSuggestions();
@@ -866,6 +926,14 @@ clearFiltersBtn.addEventListener("click", () => {
 exportCsvBtn.addEventListener("click", async () => {
   try {
     await downloadCsv();
+  } catch (error) {
+    showToast(error.message);
+  }
+});
+
+exportPdfBtn.addEventListener("click", async () => {
+  try {
+    await downloadPdf();
   } catch (error) {
     showToast(error.message);
   }

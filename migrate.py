@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import os
+import logging
 
 import psycopg2
 from dotenv import load_dotenv
 
 load_dotenv()
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+logger = logging.getLogger("ritmo_financeiro_migrate")
 
 SCHEMA_SQL = """
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
@@ -87,7 +90,7 @@ CREATE TABLE IF NOT EXISTS transactions (
   installment_number INTEGER,
   total_installments INTEGER,
   is_recurring BOOLEAN NOT NULL DEFAULT FALSE,
-  recurrence_type TEXT CHECK (recurrence_type IN ('monthly', 'weekly', NULL)),
+  recurrence_type TEXT CHECK (recurrence_type IS NULL OR recurrence_type IN ('monthly', 'weekly')),
   recurrence_day INTEGER,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   FOREIGN KEY (user_id, category_id) REFERENCES categories(user_id, id),
@@ -117,8 +120,15 @@ ALTER TABLE users
 
 ALTER TABLE transactions
   ADD COLUMN IF NOT EXISTS is_recurring BOOLEAN NOT NULL DEFAULT FALSE,
-  ADD COLUMN IF NOT EXISTS recurrence_type TEXT CHECK (recurrence_type IN ('monthly', 'weekly', NULL)),
+  ADD COLUMN IF NOT EXISTS recurrence_type TEXT,
   ADD COLUMN IF NOT EXISTS recurrence_day INTEGER;
+
+ALTER TABLE transactions
+  DROP CONSTRAINT IF EXISTS transactions_recurrence_type_check;
+
+ALTER TABLE transactions
+  ADD CONSTRAINT transactions_recurrence_type_check
+  CHECK (recurrence_type IS NULL OR recurrence_type IN ('monthly', 'weekly'));
 """
 
 
@@ -131,7 +141,7 @@ def run_migrations(conn) -> None:
 def migrate() -> None:
     database_url = os.getenv("DATABASE_URL", "").strip()
     if not database_url:
-        raise RuntimeError("DATABASE_URL precisa estar definida.")
+        raise RuntimeError("DATABASE_URL environment variable is required.")
 
     conn = psycopg2.connect(database_url)
     try:
@@ -142,4 +152,4 @@ def migrate() -> None:
 
 if __name__ == "__main__":
     migrate()
-    print("Migra\u00e7\u00f5es aplicadas com sucesso.")
+    logger.info("Migra\u00e7\u00f5es aplicadas com sucesso.")

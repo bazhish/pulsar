@@ -3,9 +3,11 @@ from __future__ import annotations
 
 import csv
 import io
+import logging
 import os
 import re
 import secrets
+import time
 from contextlib import contextmanager
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
@@ -17,7 +19,7 @@ import psycopg2
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, Form, Header, HTTPException, Query, Request, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.security import OAuth2PasswordBearer
 from fastapi.staticfiles import StaticFiles
 from jose import JWTError, jwt
@@ -44,6 +46,13 @@ CARD_UNLOCK_SECONDS = 15 * 60
 PIN_FAILURE_WINDOW_SECONDS = 5 * 60
 PIN_MAX_ATTEMPTS = 3
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
+logging.basicConfig(
+    level=getattr(logging, LOG_LEVEL, logging.INFO),
+    format="%(asctime)s %(levelname)s %(message)s",
+)
+logger = logging.getLogger("ritmo_financeiro")
 
 password_context = CryptContext(
     schemes=["bcrypt"],
@@ -86,10 +95,21 @@ DEFAULT_CATEGORIES: list[tuple[str, str, str, str, int]] = [
 ]
 
 
+def is_production() -> bool:
+    return os.getenv("ENVIRONMENT", "development").lower() == "production"
+
+
 def parse_allowed_origins() -> list[str]:
-    raw_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:8000")
-    origins = [origin.strip() for origin in raw_origins.split(",") if origin.strip() and origin.strip() != "*"]
-    return origins or ["http://localhost:8000"]
+    raw_origins = os.getenv("ALLOWED_ORIGINS", "").strip()
+    origins = [origin.strip() for origin in raw_origins.split(",") if origin.strip()]
+    if origins:
+        return origins
+    if is_production():
+        raise RuntimeError("ALLOWED_ORIGINS environment variable is required in production.")
+    return ["http://localhost:8000", "http://127.0.0.1:8000"]
+
+
+ALLOWED_ORIGINS = parse_allowed_origins()
 
 
 app = FastAPI(title="Ritmo Financeiro Pro", version="2.0.0")
@@ -105,8 +125,8 @@ def rate_limit_handler(request: Request, exc: Exception) -> Response:
 app.add_exception_handler(RateLimitExceeded, rate_limit_handler)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=parse_allowed_origins(),
-    allow_credentials=True,
+    allow_origins=ALLOWED_ORIGINS,
+    allow_credentials="*" not in ALLOWED_ORIGINS,
     allow_methods=["*"],
     allow_headers=["Authorization", "Content-Type", "X-Card-Unlock-Token"],
 )
@@ -114,7 +134,21 @@ app.add_middleware(
 
 @app.middleware("http")
 async def add_security_headers(request: Request, call_next):
-    response = await call_next(request)
+    started_at = time.perf_counter()
+    try:
+        response = await call_next(request)
+    except Exception:
+        logger.exception("Request failed method=%s path=%s", request.method, request.url.path)
+        raise
+
+    elapsed_ms = round((time.perf_counter() - started_at) * 1000, 2)
+    logger.info(
+        "Request completed method=%s path=%s status=%s duration_ms=%s",
+        request.method,
+        request.url.path,
+        response.status_code,
+        elapsed_ms,
+    )
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["X-XSS-Protection"] = "1; mode=block"
@@ -136,24 +170,28 @@ async def add_security_headers(request: Request, call_next):
 def get_database_url() -> str:
     database_url = os.getenv("DATABASE_URL", "").strip()
     if not database_url:
-        raise RuntimeError("DATABASE_URL precisa estar definida.")
+        raise RuntimeError("DATABASE_URL environment variable is required.")
     return database_url
 
 
 def get_jwt_secret() -> str:
     secret = os.getenv("JWT_SECRET_KEY", "")
+    if not secret:
+        raise RuntimeError("JWT_SECRET_KEY environment variable is required.")
     if len(secret) < 32:
-        raise RuntimeError("JWT_SECRET_KEY precisa ter pelo menos 32 caracteres.")
+        raise RuntimeError("JWT_SECRET_KEY must have at least 32 characters.")
     return secret
 
 
 def validate_runtime_config() -> None:
     get_database_url()
     get_jwt_secret()
-    if os.getenv("ENVIRONMENT", "development").lower() == "production":
-        origins = parse_allowed_origins()
+    if is_production():
+        origins = ALLOWED_ORIGINS
         if any("localhost" in origin or "127.0.0.1" in origin for origin in origins):
             raise RuntimeError("ALLOWED_ORIGINS de produ\u00e7\u00e3o n\u00e3o deve apontar para localhost.")
+        if "*" in origins:
+            logger.warning("ALLOWED_ORIGINS is '*' in production. Use only during the first deploy and replace it with the public HTTPS URL.")
 
 
 def init_db_pool() -> None:
@@ -199,6 +237,7 @@ def db_cursor(commit: bool = False):
 
 @app.on_event("startup")
 def startup() -> None:
+    logger.info("Starting Ritmo Financeiro Pro")
     validate_runtime_config()
     init_db_pool()
     conn = get_connection()
@@ -206,10 +245,12 @@ def startup() -> None:
         run_migrations(conn)
     finally:
         release_connection(conn)
+    logger.info("Startup completed")
 
 
 @app.on_event("shutdown")
 def shutdown() -> None:
+    logger.info("Shutting down Ritmo Financeiro Pro")
     close_db_pool()
 
 
@@ -1390,8 +1431,20 @@ class RecurringPayload(BaseModel):
 
 
 @app.get("/api/health")
-def health() -> dict:
-    return {"ok": True}
+def health():
+    conn = None
+    try:
+        conn = get_connection()
+        with conn.cursor() as cursor:
+            cursor.execute("SELECT 1")
+            cursor.fetchone()
+        return {"ok": True, "db": "connected"}
+    except Exception:
+        logger.exception("Health check failed")
+        return JSONResponse({"ok": False, "db": "error"}, status_code=503)
+    finally:
+        if conn is not None:
+            release_connection(conn)
 
 
 @app.post("/api/auth/register", status_code=status.HTTP_201_CREATED)
@@ -1818,10 +1871,7 @@ def set_transaction_recurring(
     return row
 
 
-@app.get("/api/export/csv")
-def export_csv(month: Optional[str] = None, current_user: dict = Depends(get_current_user)) -> Response:
-    user_id = current_user["id"]
-    month_key = validate_month_text(month) or get_current_month()
+def get_export_transactions(user_id: str, month_key: str) -> list[dict]:
     with db_cursor() as cursor:
         cursor.execute(
             """
@@ -1836,7 +1886,14 @@ def export_csv(month: Optional[str] = None, current_user: dict = Depends(get_cur
             """,
             (user_id, month_key),
         )
-        rows = normalize_rows(cursor.fetchall())
+        return normalize_rows(cursor.fetchall())
+
+
+@app.get("/api/export/csv")
+def export_csv(month: Optional[str] = None, current_user: dict = Depends(get_current_user)) -> Response:
+    user_id = current_user["id"]
+    month_key = validate_month_text(month) or get_current_month()
+    rows = get_export_transactions(user_id, month_key)
 
     output = io.StringIO()
     writer = csv.writer(output, delimiter=";")
@@ -1860,6 +1917,138 @@ def export_csv(month: Optional[str] = None, current_user: dict = Depends(get_cur
 
     headers = {"Content-Disposition": f'attachment; filename="financeiro-{month_key}.csv"'}
     return Response(content="\ufeff" + output.getvalue(), media_type="text/csv; charset=utf-8", headers=headers)
+
+
+def pdf_escape(value: Any) -> str:
+    text = str(value or "").encode("latin-1", "replace").decode("latin-1")
+    return text.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
+
+
+def wrap_pdf_line(line: str, max_length: int = 92) -> list[str]:
+    words = line.split()
+    if not words:
+        return [""]
+
+    lines: list[str] = []
+    current = words[0]
+    for word in words[1:]:
+        if len(current) + len(word) + 1 <= max_length:
+            current = f"{current} {word}"
+        else:
+            lines.append(current)
+            current = word
+    lines.append(current)
+    return lines
+
+
+def build_basic_pdf(lines: list[str]) -> bytes:
+    prepared_lines: list[str] = []
+    for line in lines:
+        prepared_lines.extend(wrap_pdf_line(line))
+
+    max_lines_per_page = 46
+    pages = [
+        prepared_lines[index : index + max_lines_per_page]
+        for index in range(0, len(prepared_lines), max_lines_per_page)
+    ] or [["Sem dados para exibir."]]
+
+    page_count = len(pages)
+    font_object_id = 3 + page_count * 2
+    objects: dict[int, bytes] = {
+        1: b"<< /Type /Catalog /Pages 2 0 R >>",
+        font_object_id: b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+    }
+
+    page_ids: list[int] = []
+    for index, page_lines in enumerate(pages):
+        page_id = 3 + index * 2
+        content_id = page_id + 1
+        page_ids.append(page_id)
+
+        commands = ["BT", "/F1 11 Tf", "50 800 Td"]
+        for line_index, line in enumerate(page_lines):
+            if line_index:
+                commands.append("0 -16 Td")
+            commands.append(f"({pdf_escape(line)}) Tj")
+        commands.append("ET")
+
+        stream = "\n".join(commands).encode("latin-1", "replace")
+        objects[content_id] = (
+            f"<< /Length {len(stream)} >>\nstream\n".encode("ascii")
+            + stream
+            + b"\nendstream"
+        )
+        objects[page_id] = (
+            f"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] "
+            f"/Resources << /Font << /F1 {font_object_id} 0 R >> >> "
+            f"/Contents {content_id} 0 R >>"
+        ).encode("ascii")
+
+    kids = " ".join(f"{page_id} 0 R" for page_id in page_ids)
+    objects[2] = f"<< /Type /Pages /Kids [{kids}] /Count {page_count} >>".encode("ascii")
+
+    pdf = b"%PDF-1.4\n"
+    offsets = [0]
+    for object_id in range(1, max(objects) + 1):
+        offsets.append(len(pdf))
+        pdf += f"{object_id} 0 obj\n".encode("ascii") + objects[object_id] + b"\nendobj\n"
+
+    xref_offset = len(pdf)
+    pdf += f"xref\n0 {len(offsets)}\n".encode("ascii")
+    pdf += b"0000000000 65535 f \n"
+    for offset in offsets[1:]:
+        pdf += f"{offset:010d} 00000 n \n".encode("ascii")
+    pdf += (
+        f"trailer\n<< /Size {len(offsets)} /Root 1 0 R >>\n"
+        f"startxref\n{xref_offset}\n%%EOF\n"
+    ).encode("ascii")
+    return pdf
+
+
+@app.get("/api/export/pdf")
+def export_pdf(month: Optional[str] = None, current_user: dict = Depends(get_current_user)) -> Response:
+    user_id = current_user["id"]
+    month_key = validate_month_text(month) or get_current_month()
+    settings = get_settings(user_id)
+    totals = get_month_totals(user_id, month_key)
+    score_data = calculate_score(user_id, month_key)
+    rows = get_export_transactions(user_id, month_key)
+    balance = float(settings["monthly_income"] or 0) + totals["inflow"] - totals["outflow"]
+
+    lines = [
+        "Ritmo Financeiro Pro",
+        f"Relatorio financeiro - {month_key}",
+        "",
+        f"Salario base: {format_brl(float(settings['monthly_income'] or 0))}",
+        f"Entradas: {format_brl(totals['inflow'])}",
+        f"Saidas: {format_brl(totals['outflow'])}",
+        f"Saldo projetado: {format_brl(balance)}",
+        f"Ritmo Score: {score_data['score']} - {score_data['label']}",
+        "",
+        "Transacoes",
+    ]
+
+    if not rows:
+        lines.append("Nenhuma transacao encontrada para este mes.")
+    for row in rows:
+        installment = ""
+        if row.get("total_installments"):
+            installment = f" ({row.get('installment_number')}/{row.get('total_installments')})"
+        sign = "+" if row.get("type") == "income" else "-"
+        lines.append(
+            " | ".join(
+                [
+                    str(row.get("transaction_date") or ""),
+                    str(row.get("title") or ""),
+                    str(row.get("category_name") or "Sem categoria"),
+                    str(row.get("payment_method") or ""),
+                    f"{sign}{format_brl(float(row.get('amount') or 0))}{installment}",
+                ]
+            )
+        )
+
+    headers = {"Content-Disposition": f'attachment; filename="financeiro-{month_key}.pdf"'}
+    return Response(content=build_basic_pdf(lines), media_type="application/pdf", headers=headers)
 
 
 @app.post("/api/cards")
