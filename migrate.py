@@ -118,11 +118,6 @@ CREATE INDEX IF NOT EXISTS idx_cards_user_id ON cards(user_id);
 CREATE INDEX IF NOT EXISTS idx_transactions_user_month ON transactions(user_id, billing_month, transaction_date);
 CREATE INDEX IF NOT EXISTS idx_transactions_user_category ON transactions(user_id, category_id);
 CREATE INDEX IF NOT EXISTS idx_transactions_user_card ON transactions(user_id, card_id);
-CREATE INDEX IF NOT EXISTS idx_transactions_user_recurring ON transactions(user_id, is_recurring, recurrence_type);
-CREATE INDEX IF NOT EXISTS idx_transactions_user_source ON transactions(user_id, source);
-CREATE UNIQUE INDEX IF NOT EXISTS idx_transactions_user_duplicate_hash
-  ON transactions(user_id, duplicate_hash)
-  WHERE duplicate_hash IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_card_pins_user_card ON card_pins(user_id, card_id);
 
 ALTER TABLE users
@@ -154,6 +149,12 @@ ALTER TABLE transactions
 ALTER TABLE transactions
   ADD CONSTRAINT transactions_source_check
   CHECK (source IN ('manual', 'csv_import', 'open_finance_future'));
+
+CREATE INDEX IF NOT EXISTS idx_transactions_user_recurring ON transactions(user_id, is_recurring, recurrence_type);
+CREATE INDEX IF NOT EXISTS idx_transactions_user_source ON transactions(user_id, source);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_transactions_user_duplicate_hash
+  ON transactions(user_id, duplicate_hash)
+  WHERE duplicate_hash IS NOT NULL;
 """
 
 
