@@ -6,7 +6,7 @@ import pytest
 from fastapi import HTTPException
 from jose import JWTError, jwt
 
-from app.core.security import (
+from app.main import (
     create_access_token,
     hash_password,
     validate_password_strength,

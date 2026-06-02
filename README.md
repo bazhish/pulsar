@@ -1,51 +1,128 @@
 # Ritmo Financeiro Pro
 
-Projeto full stack com frontend em HTML/CSS/JS e backend em Python usando FastAPI + SQLite.
+Sistema full stack de controle financeiro pessoal com backend em FastAPI, frontend em Next.js + TypeScript e banco PostgreSQL. O projeto foi preparado para rodar localmente com Docker ou com Python direto, e pode usar PostgreSQL gerenciado no Supabase em producao.
 
-## O que foi feito
+## Stack
 
-A base visual da `nova estrutura` foi mantida como linguagem principal, mas o projeto deixou de ser um template estático e passou a ter:
+- Backend: FastAPI + Uvicorn.
+- Banco de dados: PostgreSQL, incluindo Supabase via `DATABASE_URL`.
+- Autenticacao: JWT Bearer com senhas e PINs protegidos por bcrypt.
+- Frontend: Next.js + TypeScript + Tailwind CSS em `frontend/`.
+- Deploy: Docker, Railway ou Render.
+- Qualidade: pytest, ruff, bandit e cobertura via pytest-cov.
 
-- dashboard com salário base, entradas, saídas e saldo;
-- cadastro de lançamentos;
-- categorias expansíveis;
-- seleção do tipo de gráfico;
-- módulo de cartão de crédito com:
-  - fatura do mês,
-  - limite disponível,
-  - cadastro de cartões,
-  - compras parceladas com geração automática das parcelas;
-- página de metas diárias ligada ao backend;
-- banco de dados SQLite persistente.
+## Funcionalidades
+
+- Dashboard mensal com salario base, entradas, saidas e saldo.
+- Cadastro de lancamentos, categorias e formas de pagamento.
+- Cartoes de credito com limite, fatura, PIN, parcelas e simulacao futura.
+- Metas diarias por mes.
+- Ritmo Score, alertas financeiros e graficos.
+- Exportacao CSV/PDF.
+- Perfil, troca de senha e preferencia de resumo mensal.
 
 ## Estrutura
 
-- `main.py`: API + servidor estático.
-- `data/finance.db`: banco SQLite criado automaticamente.
-- `public/`: frontend.
+- `main.py`: entrada do app para `uvicorn main:app`.
+- `app/main.py`: aplicacao FastAPI atual, incluindo rotas, regras e acesso ao banco.
+- `frontend/`: frontend Next.js + TypeScript.
+- `migrate.py`: cria/atualiza o schema PostgreSQL usado pelo app.
+- `tests/`: testes unitarios e de integracao.
+- `Dockerfile` e `docker-compose.yml`: execucao containerizada.
 
-## Como rodar
+## Variaveis de ambiente
 
-Crie um ambiente virtual e instale as dependências:
-
-```bash
-pip install -r requirements.txt
-```
-
-Depois rode:
+Crie um `.env` local a partir de `.env.example`:
 
 ```bash
-uvicorn main:app --reload
+DATABASE_URL=postgresql://user:password@host:5432/dbname
+JWT_SECRET_KEY=sua-chave-secreta-com-pelo-menos-32-caracteres
+ALLOWED_ORIGINS=http://localhost:8000
+ENVIRONMENT=development
 ```
 
-Abra no navegador:
+Em producao, use uma `JWT_SECRET_KEY` forte, configure `ALLOWED_ORIGINS` com a URL HTTPS real do app e mantenha `DATABASE_URL` fora do codigo.
+
+## Como rodar localmente com Docker
+
+```bash
+docker compose up
+```
+
+A API fica em:
+
+```bash
+http://localhost:8000
+```
+
+O `docker-compose.yml` sobe um PostgreSQL local e aponta `DATABASE_URL` para esse banco.
+
+## Como rodar localmente com Python
+
+Instale as dependencias:
+
+```bash
+python -m pip install -r requirements.txt
+```
+
+Configure `DATABASE_URL` para um PostgreSQL local ou Supabase. Depois rode:
+
+```bash
+python migrate.py
+python -m uvicorn main:app --reload --port 8000
+```
+
+Abra a API:
 
 ```bash
 http://127.0.0.1:8000
 ```
 
+## Como rodar o frontend Next.js
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Configure `NEXT_PUBLIC_API_BASE_URL=http://localhost:8000` quando o backend estiver em outra origem. O frontend fica em:
+
+```bash
+http://localhost:3000
+```
+
+## Como rodar testes
+
+Unitarios e smoke tests sem banco externo:
+
+```bash
+python -m pytest -q
+```
+
+Integracao com PostgreSQL:
+
+```bash
+$env:TEST_DATABASE_URL="postgresql://ritmo:ritmo_test@localhost:5432/ritmo_test"
+python -m pytest tests/integration -q
+```
+
+Sem `TEST_DATABASE_URL`, os testes de integracao sao pulados de proposito para nao usar banco de desenvolvimento ou producao por acidente.
+
+Qualidade e seguranca:
+
+```bash
+python -m ruff check .
+python -m bandit -r app
+```
+
+Mais detalhes estao em `docs/quality.md`.
+
 ## Rotas principais da API
 
+- `GET /api/health`
+- `POST /api/auth/register`
+- `POST /api/auth/login`
 - `GET /api/bootstrap?month=2026-03`
 - `GET /api/goals?month=2026-03`
 - `POST /api/settings`
@@ -55,13 +132,6 @@ http://127.0.0.1:8000
 - `POST /api/cards/{id}/installments`
 - `DELETE /api/transactions/{id}`
 
-## Próximo passo realmente profissional
+## Observacao operacional
 
-O que está entregue aqui já é uma base séria. O próximo nível seria:
-
-- autenticação por usuário;
-- multiusuário com isolamento de dados;
-- PostgreSQL no lugar de SQLite;
-- testes automatizados;
-- logs e observabilidade;
-- deploy com Docker e variáveis de ambiente.
+O container de producao roda temporariamente com apenas 1 worker. O app ainda usa estado em memoria para logout, tentativas de PIN e desbloqueio temporario de cartao; multiplos workers podem causar inconsistencia enquanto esse estado nao for movido para Redis, banco ou outro armazenamento compartilhado.

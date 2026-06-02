@@ -44,6 +44,7 @@ CREATE TABLE IF NOT EXISTS settings (
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   monthly_income NUMERIC(14, 2) NOT NULL DEFAULT 0,
   daily_goal NUMERIC(14, 2) NOT NULL DEFAULT 120,
+  reserve_amount NUMERIC(14, 2) NOT NULL DEFAULT 0,
   currency TEXT NOT NULL DEFAULT 'BRL',
   PRIMARY KEY (user_id, id)
 );
@@ -92,6 +93,11 @@ CREATE TABLE IF NOT EXISTS transactions (
   is_recurring BOOLEAN NOT NULL DEFAULT FALSE,
   recurrence_type TEXT CHECK (recurrence_type IS NULL OR recurrence_type IN ('monthly', 'weekly')),
   recurrence_day INTEGER,
+  source TEXT NOT NULL DEFAULT 'manual',
+  external_id TEXT,
+  imported_at TIMESTAMPTZ,
+  raw_description TEXT,
+  duplicate_hash TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   FOREIGN KEY (user_id, category_id) REFERENCES categories(user_id, id),
   FOREIGN KEY (user_id, card_id) REFERENCES cards(user_id, id)
@@ -113,6 +119,10 @@ CREATE INDEX IF NOT EXISTS idx_transactions_user_month ON transactions(user_id, 
 CREATE INDEX IF NOT EXISTS idx_transactions_user_category ON transactions(user_id, category_id);
 CREATE INDEX IF NOT EXISTS idx_transactions_user_card ON transactions(user_id, card_id);
 CREATE INDEX IF NOT EXISTS idx_transactions_user_recurring ON transactions(user_id, is_recurring, recurrence_type);
+CREATE INDEX IF NOT EXISTS idx_transactions_user_source ON transactions(user_id, source);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_transactions_user_duplicate_hash
+  ON transactions(user_id, duplicate_hash)
+  WHERE duplicate_hash IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_card_pins_user_card ON card_pins(user_id, card_id);
 
 ALTER TABLE users
@@ -121,7 +131,15 @@ ALTER TABLE users
 ALTER TABLE transactions
   ADD COLUMN IF NOT EXISTS is_recurring BOOLEAN NOT NULL DEFAULT FALSE,
   ADD COLUMN IF NOT EXISTS recurrence_type TEXT,
-  ADD COLUMN IF NOT EXISTS recurrence_day INTEGER;
+  ADD COLUMN IF NOT EXISTS recurrence_day INTEGER,
+  ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'manual',
+  ADD COLUMN IF NOT EXISTS external_id TEXT,
+  ADD COLUMN IF NOT EXISTS imported_at TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS raw_description TEXT,
+  ADD COLUMN IF NOT EXISTS duplicate_hash TEXT;
+
+ALTER TABLE settings
+  ADD COLUMN IF NOT EXISTS reserve_amount NUMERIC(14, 2) NOT NULL DEFAULT 0;
 
 ALTER TABLE transactions
   DROP CONSTRAINT IF EXISTS transactions_recurrence_type_check;
@@ -129,6 +147,13 @@ ALTER TABLE transactions
 ALTER TABLE transactions
   ADD CONSTRAINT transactions_recurrence_type_check
   CHECK (recurrence_type IS NULL OR recurrence_type IN ('monthly', 'weekly'));
+
+ALTER TABLE transactions
+  DROP CONSTRAINT IF EXISTS transactions_source_check;
+
+ALTER TABLE transactions
+  ADD CONSTRAINT transactions_source_check
+  CHECK (source IN ('manual', 'csv_import', 'open_finance_future'));
 """
 
 

@@ -13,17 +13,15 @@ import time
 import uuid
 from contextlib import contextmanager
 from datetime import date, datetime, timedelta, timezone
-from decimal import Decimal
-from pathlib import Path
+from decimal import Decimal, ROUND_HALF_UP
 from typing import Any, Literal, Optional
 from uuid import UUID
 
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI, Form, Header, HTTPException, Query, Request, status
+from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Query, Request, UploadFile, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import JSONResponse
 from fastapi.security import OAuth2PasswordBearer
-from fastapi.staticfiles import StaticFiles
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from psycopg2 import errors
@@ -39,15 +37,19 @@ from migrate import run_migrations
 
 load_dotenv()
 
-BASE_DIR = Path(__file__).resolve().parent.parent
-PUBLIC_DIR = BASE_DIR / "public"
-
 JWT_ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_HOURS = 24
 CARD_UNLOCK_SECONDS = 15 * 60
 PIN_FAILURE_WINDOW_SECONDS = 5 * 60
 PIN_MAX_ATTEMPTS = 3
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+CSV_IMPORT_MAX_BYTES = 1024 * 1024
+CSV_IMPORT_PREVIEW_LIMIT = 10
+CSV_IMPORT_ALLOWED_CONTENT_TYPES = {
+    "text/csv",
+    "application/csv",
+    "application/vnd.ms-excel",
+}
 
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
 LOG_FORMAT = os.getenv("LOG_FORMAT", "text")
@@ -111,6 +113,7 @@ limiter = Limiter(key_func=get_remote_address)
 db_pool: Optional[ThreadedConnectionPool] = None
 card_pin_failures: dict[str, dict[str, Any]] = {}
 card_unlock_sessions: dict[str, dict[str, Any]] = {}
+csv_import_sessions: dict[str, dict[str, Any]] = {}
 revoked_tokens: set[str] = set()
 startup_time = time.time()
 
@@ -373,9 +376,112 @@ def get_month_range(month_key: str) -> tuple[str, str]:
     return start.isoformat(), end.isoformat()
 
 
+CENT = Decimal("0.01")
+
+
+def to_decimal(value: Any) -> Decimal:
+    if isinstance(value, Decimal):
+        return value
+    if value is None:
+        return Decimal("0")
+    return Decimal(str(value))
+
+
+def round_money(value: Any) -> Decimal:
+    return to_decimal(value).quantize(CENT, rounding=ROUND_HALF_UP)
+
+
+def distribute_installments(total: Any, installments: int) -> list[Decimal]:
+    if installments <= 0:
+        raise ValueError("Quantidade de parcelas deve ser maior que zero.")
+
+    rounded_total = round_money(total)
+    total_cents = int((rounded_total * 100).to_integral_value(rounding=ROUND_HALF_UP))
+    if total_cents < installments:
+        raise ValueError("Valor total insuficiente para a quantidade de parcelas.")
+
+    base = round_money(Decimal(total_cents // installments) / Decimal("100"))
+    parts = [base for _ in range(installments)]
+    parts[-1] = round_money(rounded_total - sum(parts[:-1], Decimal("0")))
+    return parts
+
+
+def normalize_duplicate_text(value: str) -> str:
+    return re.sub(r"\s+", " ", value.strip().lower())
+
+
+def build_duplicate_hash(user_id: str, transaction_date: str, description: str, amount: Any) -> str:
+    amount_text = f"{round_money(amount):.2f}"
+    raw = "|".join([user_id, transaction_date, normalize_duplicate_text(description), amount_text])
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def parse_decimal_text(value: Any) -> Decimal:
+    text = str(value or "").strip()
+    if not text:
+        raise ValueError("Valor vazio.")
+    cleaned = re.sub(r"[^\d,.\-+]", "", text)
+    if not cleaned:
+        raise ValueError("Valor inválido.")
+    if "," in cleaned and "." in cleaned:
+        cleaned = cleaned.replace(".", "").replace(",", ".")
+    elif "," in cleaned:
+        cleaned = cleaned.replace(",", ".")
+    return to_decimal(cleaned)
+
+
+def parse_import_date(value: Any) -> str:
+    text = str(value or "").strip()
+    for date_format in ("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y"):
+        try:
+            return datetime.strptime(text, date_format).date().isoformat()
+        except ValueError:
+            continue
+    raise ValueError("Data inválida.")
+
+
+def parse_import_type(raw_type: Any, amount: Decimal) -> Literal["income", "expense"]:
+    if raw_type is None or str(raw_type).strip() == "":
+        return "expense" if amount < 0 else "income"
+
+    value = normalize_duplicate_text(str(raw_type))
+    if value in {"income", "entrada", "credito", "crédito", "credit", "receita"}:
+        return "income"
+    if value in {"expense", "saida", "saída", "debito", "débito", "debit", "despesa"}:
+        return "expense"
+    return "expense" if amount < 0 else "income"
+
+
+def detect_csv_delimiter(sample: str) -> str:
+    first_line = sample.splitlines()[0] if sample.splitlines() else ""
+    return ";" if first_line.count(";") >= first_line.count(",") else ","
+
+
+def parse_csv_rows(content: bytes) -> tuple[list[str], list[dict[str, str]]]:
+    try:
+        text = content.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        text = content.decode("latin-1")
+
+    delimiter = detect_csv_delimiter(text[:2048])
+    reader = csv.DictReader(io.StringIO(text), delimiter=delimiter)
+    columns = [column.strip() for column in (reader.fieldnames or []) if column and column.strip()]
+    if not columns:
+        raise HTTPException(status_code=400, detail="CSV sem cabeçalho.")
+
+    rows: list[dict[str, str]] = []
+    for row in reader:
+        cleaned = {str(key or "").strip(): str(value or "").strip() for key, value in row.items() if key}
+        if any(cleaned.values()):
+            rows.append(cleaned)
+    if not rows:
+        raise HTTPException(status_code=400, detail="CSV sem linhas para importar.")
+    return columns, rows
+
+
 def serialize_value(value: Any) -> Any:
     if isinstance(value, Decimal):
-        return float(value)
+        return round_money(value)
     if isinstance(value, UUID):
         return str(value)
     if isinstance(value, (datetime, date)):
@@ -527,8 +633,8 @@ def get_user_by_id(user_id: str) -> Optional[dict]:
 def ensure_user_defaults_for_cursor(cursor, user_id: str) -> None:
     cursor.execute(
         """
-        INSERT INTO settings (id, user_id, monthly_income, daily_goal, currency)
-        VALUES (1, %s, 5500, 120, 'BRL')
+        INSERT INTO settings (id, user_id, monthly_income, daily_goal, reserve_amount, currency)
+        VALUES (1, %s, 5500, 120, 0, 'BRL')
         ON CONFLICT (user_id, id) DO NOTHING
         """,
         (user_id,),
@@ -663,7 +769,7 @@ def get_cards_summary(user_id: str, month: str) -> list[dict]:
                 (user_id, card["id"], month),
             )
             invoice_row = require_row(normalize_row(cursor.fetchone()), "Resumo do cart\u00e3o n\u00e3o encontrado.")
-            invoice = float(invoice_row["total"])
+            invoice = round_money(invoice_row["total"])
 
             cursor.execute(
                 """
@@ -700,7 +806,7 @@ def get_cards_summary(user_id: str, month: str) -> list[dict]:
                             "title": current_row["title"],
                             "installmentLabel": f'{current_row["installment_number"]}/{current_row["total_installments"]}',
                             "remaining": current_row["total_installments"] - current_row["installment_number"],
-                            "amount": round(float(current_row["amount"]), 2),
+                            "amount": round_money(current_row["amount"]),
                         }
                     )
                     continue
@@ -741,12 +847,17 @@ def get_cards_summary(user_id: str, month: str) -> list[dict]:
                             "title": sample["title"],
                             "installmentLabel": "\u00c0 frente",
                             "remaining": future_count,
-                            "amount": round(float(sample["amount"]), 2),
+                            "amount": round_money(sample["amount"]),
                         }
                     )
 
-            card["invoice"] = round(invoice, 2)
-            card["availableCredit"] = round(float(card["credit_limit"]) - invoice, 2)
+            card["invoice"] = invoice
+            card["availableCredit"] = round_money(card["credit_limit"] - invoice)
+            commitment = get_card_commitment(user_id, int(card["id"]), month)
+            card["committedLimit"] = commitment["committedLimit"]
+            card["remainingInstallments"] = commitment["remainingInstallments"]
+            usage = (invoice / round_money(card["credit_limit"])) if round_money(card["credit_limit"]) > 0 else Decimal("0")
+            card["invoiceAlert"] = usage > Decimal("0.8")
             card["activeInstallmentsCount"] = len(active_installments)
             card["activeInstallments"] = active_installments
             result.append(card)
@@ -784,7 +895,7 @@ def get_card_pin_row(user_id: str, card_id: int) -> Optional[dict]:
         return normalize_row(cursor.fetchone())
 
 
-def get_invoice_total(user_id: str, card_id: int, month: str) -> float:
+def get_invoice_total(user_id: str, card_id: int, month: str) -> Decimal:
     with db_cursor() as cursor:
         cursor.execute(
             """
@@ -798,7 +909,7 @@ def get_invoice_total(user_id: str, card_id: int, month: str) -> float:
             (user_id, card_id, month),
         )
         row = require_row(normalize_row(cursor.fetchone()), "Fatura n\u00e3o encontrada.")
-    return round(float(row["total"]), 2)
+    return round_money(row["total"])
 
 
 def get_active_installments(user_id: str, card_id: int, month: str) -> list[dict]:
@@ -826,7 +937,7 @@ def get_active_installments(user_id: str, card_id: int, month: str) -> list[dict
         installments.append(
             {
                 "title": row["title"],
-                "amount": round(float(row["amount"]), 2),
+                "amount": round_money(row["amount"]),
                 "billing_month": row["billing_month"],
                 "installment_number": current,
                 "total_installments": total,
@@ -838,32 +949,116 @@ def get_active_installments(user_id: str, card_id: int, month: str) -> list[dict
     return installments
 
 
-def simulate_card_invoices(user_id: str, card_id: int, start_month: str, months: int) -> list[dict]:
+def simulate_card_invoices(
+    user_id: str,
+    card_id: int,
+    start_month: str,
+    months: int,
+    category_id: Optional[int] = None,
+) -> list[dict]:
     result: list[dict] = []
     with db_cursor() as cursor:
         for offset in range(months):
             month_key = add_months(start_month, offset)
+            category_filter = "AND category_id = %s" if category_id else ""
+            params: tuple[Any, ...] = (user_id, card_id, month_key)
+            if category_id:
+                params = (*params, category_id)
             cursor.execute(
-                """
+                f"""
                 SELECT COALESCE(SUM(amount), 0) AS total, COUNT(*) AS installments_count
                 FROM transactions
                 WHERE user_id = %s
                   AND card_id = %s
                   AND type = 'expense'
-                  AND installment_group IS NOT NULL
-                  AND billing_month = %s
+                  AND COALESCE(billing_month, substring(transaction_date from 1 for 7)) = %s
+                  {category_filter}
                 """,
-                (user_id, card_id, month_key),
+                params,
             )
             row = require_row(normalize_row(cursor.fetchone()), "Simula\u00e7\u00e3o de fatura n\u00e3o encontrada.")
             result.append(
                 {
                     "month": month_key,
-                    "projected_total": round(float(row["total"]), 2),
+                    "projected_total": round_money(row["total"]),
+                    "projectedTotal": round_money(row["total"]),
                     "installments_count": int(row["installments_count"]),
+                    "itemsCount": int(row["installments_count"]),
                 }
             )
     return result
+
+
+def get_card_commitment(user_id: str, card_id: int, month: str, category_id: Optional[int] = None) -> dict:
+    category_filter = "AND category_id = %s" if category_id else ""
+    params: tuple[Any, ...] = (user_id, card_id, month)
+    if category_id:
+        params = (*params, category_id)
+    with db_cursor() as cursor:
+        cursor.execute(
+            f"""
+            SELECT COALESCE(SUM(amount), 0) AS total, COUNT(*) AS remaining_installments
+            FROM transactions
+            WHERE user_id = %s
+              AND card_id = %s
+              AND type = 'expense'
+              AND installment_group IS NOT NULL
+              AND billing_month >= %s
+              {category_filter}
+            """,
+            params,
+        )
+        row = require_row(normalize_row(cursor.fetchone()), "Comprometimento do cartão não encontrado.")
+    return {
+        "committedLimit": round_money(row["total"]),
+        "remainingInstallments": int(row["remaining_installments"]),
+    }
+
+
+def get_grouped_installment_purchases(user_id: str, card_id: int, month: str, category_id: Optional[int] = None) -> list[dict]:
+    category_filter = "AND category_id = %s" if category_id else ""
+    params: tuple[Any, ...] = (user_id, card_id, month)
+    if category_id:
+        params = (*params, category_id)
+    with db_cursor() as cursor:
+        cursor.execute(
+            f"""
+            SELECT
+              installment_group,
+              MIN(title) AS title,
+              MIN(transaction_date) AS purchase_date,
+              MIN(billing_month) AS first_open_month,
+              MAX(billing_month) AS last_month,
+              MAX(total_installments) AS total_installments,
+              COUNT(*) AS remaining_installments,
+              COALESCE(SUM(amount), 0) AS remaining_amount
+            FROM transactions
+            WHERE user_id = %s
+              AND card_id = %s
+              AND type = 'expense'
+              AND installment_group IS NOT NULL
+              AND billing_month >= %s
+              {category_filter}
+            GROUP BY installment_group
+            ORDER BY first_open_month ASC, title ASC
+            """,
+            params,
+        )
+        rows = normalize_rows(cursor.fetchall())
+
+    return [
+        {
+            "group": row["installment_group"],
+            "title": row["title"],
+            "purchaseDate": row["purchase_date"],
+            "firstOpenMonth": row["first_open_month"],
+            "lastMonth": row["last_month"],
+            "totalInstallments": int(row["total_installments"] or 0),
+            "remainingInstallments": int(row["remaining_installments"] or 0),
+            "remainingAmount": round_money(row["remaining_amount"]),
+        }
+        for row in rows
+    ]
 
 
 def get_recent_card_transactions(user_id: str, card_id: int) -> list[dict]:
@@ -884,21 +1079,41 @@ def get_recent_card_transactions(user_id: str, card_id: int) -> list[dict]:
         return normalize_rows(cursor.fetchall())
 
 
-def get_unlocked_card_details(user_id: str, card_id: int, month: str, include_token: bool = False) -> dict:
+def get_unlocked_card_details(
+    user_id: str,
+    card_id: int,
+    month: str,
+    include_token: bool = False,
+    category_id: Optional[int] = None,
+) -> dict:
     card = get_card_for_user(user_id, card_id)
     invoice = get_invoice_total(user_id, card_id, month)
+    commitment = get_card_commitment(user_id, card_id, month, category_id)
+    usage = (invoice / round_money(card["credit_limit"])) if round_money(card["credit_limit"]) > 0 else Decimal("0")
+    invoice_alert = None
+    if usage > Decimal("0.8"):
+        invoice_alert = {
+            "type": "danger" if usage > Decimal("0.9") else "warning",
+            "message": "Fatura alta para o limite do cartão.",
+            "usagePercent": int((usage * Decimal("100")).to_integral_value(rounding=ROUND_HALF_UP)),
+        }
     details = {
         "id": card["id"],
         "name": card["name"],
         "brand": card["brand"],
         "last_four": card["last_four"],
-        "credit_limit": round(float(card["credit_limit"]), 2),
+        "credit_limit": round_money(card["credit_limit"]),
         "invoice": invoice,
-        "available_credit": round(float(card["credit_limit"]) - invoice, 2),
+        "available_credit": round_money(card["credit_limit"] - invoice),
+        "committed_limit": commitment["committedLimit"],
+        "committedLimit": commitment["committedLimit"],
+        "remainingInstallments": commitment["remainingInstallments"],
         "closing_day": card["closing_day"],
         "due_day": card["due_day"],
         "active_installments": get_active_installments(user_id, card_id, month),
-        "upcoming_invoices": simulate_card_invoices(user_id, card_id, month, 12),
+        "groupedInstallments": get_grouped_installment_purchases(user_id, card_id, month, category_id),
+        "invoiceAlert": invoice_alert,
+        "upcoming_invoices": simulate_card_invoices(user_id, card_id, month, 12, category_id),
         "recent_transactions": get_recent_card_transactions(user_id, card_id),
         "is_unlocked": True,
     }
@@ -1027,15 +1242,15 @@ def get_dashboard(user_id: str, month: str) -> dict:
                 (user_id, month_key),
             )
             row = require_row(normalize_row(cursor.fetchone()), "Totais mensais n\u00e3o encontrados.")
-            inflow = round(float(row["inflow"]), 2)
-            outflow = round(float(row["outflow"]), 2)
+            inflow = round_money(row["inflow"])
+            outflow = round_money(row["outflow"])
             monthly_trend.append(
                 {
                     "month": month_key,
                     "label": format_month_label(month_key),
                     "inflow": inflow,
                     "outflow": outflow,
-                    "net": round(inflow - outflow, 2),
+                    "net": round_money(inflow - outflow),
                 }
             )
 
@@ -1053,15 +1268,15 @@ def get_dashboard(user_id: str, month: str) -> dict:
         )
         recent_transactions = normalize_rows(cursor.fetchall())
 
-    inflow = round(float(totals["inflow"]), 2)
-    outflow = round(float(totals["outflow"]), 2)
+    inflow = round_money(totals["inflow"])
+    outflow = round_money(totals["outflow"])
 
     return {
         "month": month,
         "monthlyIncome": settings["monthly_income"],
         "inflow": inflow,
         "outflow": outflow,
-        "balance": round(float(settings["monthly_income"]) + inflow - outflow, 2),
+        "balance": round_money(settings["monthly_income"] + inflow - outflow),
         "categoryBreakdown": category_breakdown,
         "monthlyTrend": monthly_trend,
         "recentTransactions": recent_transactions,
@@ -1076,6 +1291,15 @@ def get_goals(user_id: str, month: str) -> dict:
     from calendar import monthrange
 
     total_days = monthrange(year, month_num)[1]
+    today = datetime.now(timezone.utc).date()
+    current_month = today.strftime("%Y-%m")
+    if month < current_month:
+        progress_day = total_days
+    elif month > current_month:
+        progress_day = 1
+    else:
+        progress_day = min(today.day, total_days)
+    cutoff_date = date(year, month_num, progress_day).isoformat()
 
     with db_cursor() as cursor:
         cursor.execute(
@@ -1091,33 +1315,103 @@ def get_goals(user_id: str, month: str) -> dict:
             (user_id, start, end, month),
         )
         rows = normalize_rows(cursor.fetchall())
+        cursor.execute(
+            """
+            SELECT
+              COALESCE(SUM(CASE WHEN type = 'income' THEN amount END), 0) AS inflow,
+              COALESCE(SUM(CASE WHEN type = 'expense' THEN amount END), 0) AS outflow
+            FROM transactions
+            WHERE user_id = %s
+              AND COALESCE(billing_month, substring(transaction_date from 1 for 7)) = %s
+            """,
+            (user_id, month),
+        )
+        totals = require_row(normalize_row(cursor.fetchone()), "Totais das metas não encontrados.")
+        cursor.execute(
+            """
+            SELECT COALESCE(SUM(amount), 0) AS outflow
+            FROM transactions
+            WHERE user_id = %s
+              AND type = 'expense'
+              AND COALESCE(billing_month, substring(transaction_date from 1 for 7)) = %s
+              AND transaction_date <= %s
+            """,
+            (user_id, month, cutoff_date),
+        )
+        current_outflow_row = require_row(normalize_row(cursor.fetchone()), "Gasto atual não encontrado.")
 
-    day_map = {int(row["day"]): float(row["total"]) for row in rows}
+    day_map = {int(row["day"]): round_money(row["total"]) for row in rows}
     days: list[dict] = []
+    legacy_daily_goal = round_money(settings["daily_goal"])
+    reserve_amount = round_money(settings.get("reserve_amount") or 0)
+    monthly_income = round_money(settings["monthly_income"] or 0)
+    inflow = round_money(totals["inflow"])
+    outflow = round_money(totals["outflow"])
+    outflow_to_today = round_money(current_outflow_row["outflow"])
+    available_budget = round_money(monthly_income + inflow - reserve_amount)
+    recommended_daily_goal = round_money(available_budget / Decimal(total_days)) if available_budget > 0 else Decimal("0.00")
+    target_daily_goal = recommended_daily_goal if recommended_daily_goal > 0 else legacy_daily_goal
+    current_average_spend = round_money(outflow_to_today / Decimal(progress_day)) if progress_day > 0 else Decimal("0.00")
+    projected_closing = round_money(current_average_spend * Decimal(total_days))
+    allowed_remaining = round_money(available_budget - outflow_to_today)
+
+    if available_budget <= 0 and projected_closing > 0:
+        status_name = "red"
+    elif available_budget <= 0 or projected_closing <= available_budget:
+        status_name = "green"
+    elif projected_closing <= available_budget * Decimal("1.10"):
+        status_name = "yellow"
+    else:
+        status_name = "red"
+
     for day_number in range(1, total_days + 1):
-        spent = round(day_map.get(day_number, 0.0), 2)
-        remaining = round(float(settings["daily_goal"]) - spent, 2)
-        progress = min(100.0, (spent / float(settings["daily_goal"])) * 100) if settings["daily_goal"] > 0 else 0.0
-        status_name = "over" if spent > settings["daily_goal"] else ("empty" if spent == 0 else "ok")
+        spent = round_money(day_map.get(day_number, Decimal("0")))
+        remaining = round_money(target_daily_goal - spent)
+        progress = float(min(Decimal("100"), (spent / target_daily_goal) * Decimal("100"))) if target_daily_goal > 0 else 0.0
+        day_status = "over" if spent > target_daily_goal else ("empty" if spent == 0 else "ok")
         days.append(
             {
                 "day": day_number,
                 "spent": spent,
                 "remaining": remaining,
                 "progress": progress,
-                "status": status_name,
+                "status": day_status,
             }
         )
 
+    days_above_goal = len([day for day in days if to_decimal(day["spent"]) > target_daily_goal])
+    days_below_goal = len([day for day in days if Decimal("0") < to_decimal(day["spent"]) <= target_daily_goal])
+    risk_alert = {
+        "green": "Ritmo dentro do orçamento planejado.",
+        "yellow": "A projeção está até 10% acima do orçamento.",
+        "red": "A projeção passa de 10% acima do orçamento.",
+    }[status_name]
+
     return {
         "month": month,
-        "dailyGoal": float(settings["daily_goal"]),
+        "dailyGoal": legacy_daily_goal,
+        "reserveAmount": reserve_amount,
+        "monthlyBudget": available_budget,
+        "availableBudget": available_budget,
+        "recommendedDailyGoal": recommended_daily_goal,
+        "targetDailyGoal": target_daily_goal,
+        "allowedRemaining": allowed_remaining,
+        "daysAboveGoal": days_above_goal,
+        "daysBelowGoal": days_below_goal,
+        "currentAverageSpend": current_average_spend,
+        "projectedClosing": projected_closing,
+        "goalStatus": status_name,
+        "riskAlert": risk_alert,
+        "totalOutflow": outflow,
+        "outflowToToday": outflow_to_today,
+        "progressDay": progress_day,
+        "totalDays": total_days,
         "days": days,
     }
 
 
-def format_brl(value: float) -> str:
-    formatted = f"{float(value):,.2f}"
+def format_brl(value: Any) -> str:
+    formatted = f"{round_money(value):,.2f}"
     return "R$ " + formatted.replace(",", "X").replace(".", ",").replace("X", ".")
 
 
@@ -1135,7 +1429,7 @@ def get_month_totals(user_id: str, month: str) -> dict:
             (user_id, month),
         )
         row = require_row(normalize_row(cursor.fetchone()), "Totais do m\u00eas n\u00e3o encontrados.")
-    return {"inflow": round(float(row["inflow"]), 2), "outflow": round(float(row["outflow"]), 2)}
+    return {"inflow": round_money(row["inflow"]), "outflow": round_money(row["outflow"])}
 
 
 def get_score_label(score: int) -> dict:
@@ -1152,7 +1446,7 @@ def get_score_label(score: int) -> dict:
 
 def calculate_score(user_id: str, month: str) -> dict:
     settings = get_settings(user_id)
-    monthly_income = float(settings["monthly_income"] or 0)
+    monthly_income = round_money(settings["monthly_income"] or 0)
     totals = get_month_totals(user_id, month)
     inflow = totals["inflow"]
     outflow = totals["outflow"]
@@ -1160,14 +1454,14 @@ def calculate_score(user_id: str, month: str) -> dict:
     breakdown = {"gastos": 0, "consistencia": 0, "reservas": 0, "cartoes": 0}
 
     denominator = monthly_income + inflow
-    ratio_gastos = (outflow / denominator) if denominator > 0 else (1 if outflow > 0 else 0)
-    if ratio_gastos > 0.9:
+    ratio_gastos = (outflow / denominator) if denominator > 0 else (Decimal("1") if outflow > 0 else Decimal("0"))
+    if ratio_gastos > Decimal("0.9"):
         breakdown["gastos"] = -200
-    elif ratio_gastos > 0.75:
+    elif ratio_gastos > Decimal("0.75"):
         breakdown["gastos"] = -120
-    elif ratio_gastos > 0.6:
+    elif ratio_gastos > Decimal("0.6"):
         breakdown["gastos"] = -60
-    elif ratio_gastos > 0.4:
+    elif ratio_gastos > Decimal("0.4"):
         breakdown["gastos"] = -20
 
     recent_months = [add_months(month, offset) for offset in (-2, -1, 0)]
@@ -1201,18 +1495,18 @@ def calculate_score(user_id: str, month: str) -> dict:
         )
         reserve_row = require_row(normalize_row(cursor.fetchone()), "Reservas n\u00e3o encontradas.")
 
-    total_reserva = float(reserve_row["total"] or 0)
+    total_reserva = round_money(reserve_row["total"] or 0)
     if total_reserva > 0 and monthly_income > 0:
-        breakdown["reservas"] = min(100, int((total_reserva / monthly_income) * 200))
+        breakdown["reservas"] = min(100, int((total_reserva / monthly_income) * Decimal("200")))
 
     for card in list_cards(user_id):
-        credit_limit = float(card["credit_limit"] or 0)
+        credit_limit = round_money(card["credit_limit"] or 0)
         if credit_limit <= 0:
             continue
         uso_pct = get_invoice_total(user_id, int(card["id"]), month) / credit_limit
-        if uso_pct > 0.9:
+        if uso_pct > Decimal("0.9"):
             breakdown["cartoes"] -= 80
-        elif uso_pct > 0.7:
+        elif uso_pct > Decimal("0.7"):
             breakdown["cartoes"] -= 40
 
     base += sum(breakdown.values())
@@ -1223,22 +1517,23 @@ def calculate_score(user_id: str, month: str) -> dict:
 
 def get_alerts_for_month(user_id: str, month: str) -> list[dict]:
     settings = get_settings(user_id)
-    monthly_income = float(settings["monthly_income"] or 0)
+    monthly_income = round_money(settings["monthly_income"] or 0)
     totals = get_month_totals(user_id, month)
     alerts: list[dict] = []
 
     for card in list_cards(user_id):
-        credit_limit = float(card["credit_limit"] or 0)
+        credit_limit = round_money(card["credit_limit"] or 0)
         if credit_limit <= 0:
             continue
         invoice = get_invoice_total(user_id, int(card["id"]), month)
         usage = invoice / credit_limit
-        if usage > 0.8:
+        if usage > Decimal("0.8"):
+            usage_percent = int((usage * Decimal("100")).to_integral_value(rounding=ROUND_HALF_UP))
             alerts.append(
                 {
                     "type": "danger",
                     "category": "cart\u00e3o",
-                    "message": f"Cart\u00e3o {card['name']} est\u00e1 com {round(usage * 100)}% do limite",
+                    "message": f"Cart\u00e3o {card['name']} est\u00e1 com {usage_percent}% do limite",
                 }
             )
 
@@ -1271,10 +1566,10 @@ def get_alerts_for_month(user_id: str, month: str) -> list[dict]:
                 (user_id, category["id"], previous_months),
             )
             previous_row = require_row(normalize_row(cursor.fetchone()), "M\u00e9dia de categoria n\u00e3o encontrada.")
-            average = float(previous_row["total"] or 0) / 3
-            current_total = float(category["total"] or 0)
-            if average > 0 and current_total > average * 1.3:
-                percent = round(((current_total / average) - 1) * 100)
+            average = round_money(to_decimal(previous_row["total"] or 0) / Decimal("3"))
+            current_total = round_money(category["total"] or 0)
+            if average > 0 and current_total > average * Decimal("1.3"):
+                percent = int((((current_total / average) - 1) * Decimal("100")).to_integral_value(rounding=ROUND_HALF_UP))
                 alerts.append(
                     {
                         "type": "warning",
@@ -1316,8 +1611,8 @@ def get_alerts_for_month(user_id: str, month: str) -> list[dict]:
             }
         )
 
-    next_invoice = float(next_invoice_row["total"] or 0)
-    if next_invoice > 500:
+    next_invoice = round_money(next_invoice_row["total"] or 0)
+    if next_invoice > Decimal("500"):
         alerts.append(
             {
                 "type": "info",
@@ -1328,13 +1623,22 @@ def get_alerts_for_month(user_id: str, month: str) -> list[dict]:
 
     goals = get_goals(user_id, month)
     days = goals["days"]
-    exceeded_days = [day for day in days if float(day["spent"]) > float(goals["dailyGoal"])]
+    goal_reference = to_decimal(goals.get("targetDailyGoal") or goals["dailyGoal"])
+    exceeded_days = [day for day in days if to_decimal(day["spent"]) > goal_reference]
     if days and len(exceeded_days) / len(days) > 0.5:
         alerts.append(
             {
                 "type": "warning",
                 "category": "meta",
                 "message": "Meta di\u00e1ria estourada em mais da metade dos dias",
+            }
+        )
+    if goals.get("goalStatus") in {"yellow", "red"}:
+        alerts.append(
+            {
+                "type": "warning" if goals["goalStatus"] == "yellow" else "danger",
+                "category": "meta",
+                "message": goals["riskAlert"],
             }
         )
 
@@ -1408,7 +1712,7 @@ def get_recurring_suggestions(user_id: str, month: str) -> list[dict]:
         for row in recurring_rows:
             dates = suggested_dates_for_recurrence(month, row["recurrence_type"], int(row["recurrence_day"]))
             for suggested_date in dates:
-                key = (row["title"], float(row["amount"]), row["category_id"], suggested_date)
+                key = (row["title"], round_money(row["amount"]), row["category_id"], suggested_date)
                 if key in seen:
                     continue
                 seen.add(key)
@@ -1432,7 +1736,7 @@ def get_recurring_suggestions(user_id: str, month: str) -> list[dict]:
                 suggestions.append(
                     {
                         "title": row["title"],
-                        "amount": round(float(row["amount"]), 2),
+                        "amount": round_money(row["amount"]),
                         "type": row["type"],
                         "category_id": row["category_id"],
                         "payment_method": row["payment_method"],
@@ -1458,8 +1762,9 @@ class RegisterPayload(BaseModel):
 
 
 class SettingsPayload(BaseModel):
-    monthlyIncome: Optional[float] = Field(default=None, ge=0, le=999999999)
-    dailyGoal: Optional[float] = Field(default=None, gt=0, le=999999999)
+    monthlyIncome: Optional[Decimal] = Field(default=None, ge=0, le=999999999)
+    dailyGoal: Optional[Decimal] = Field(default=None, gt=0, le=999999999)
+    reserveAmount: Optional[Decimal] = Field(default=None, ge=0, le=999999999)
 
     class Config:
         extra = "forbid"
@@ -1477,7 +1782,7 @@ class CategoryPayload(BaseModel):
 
 class TransactionPayload(BaseModel):
     title: str = Field(..., min_length=1, max_length=200)
-    amount: float = Field(..., gt=0, le=999999999)
+    amount: Decimal = Field(..., gt=0, le=999999999)
     type: Literal["income", "expense"] = "expense"
     categoryId: Optional[int] = Field(default=None, ge=1)
     paymentMethod: str = Field(default="pix", min_length=1, max_length=50)
@@ -1497,7 +1802,7 @@ class CardPayload(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
     brand: str = Field(..., min_length=1, max_length=40)
     lastFour: str = Field(..., min_length=4, max_length=4)
-    creditLimit: float = Field(..., ge=0, le=999999999)
+    creditLimit: Decimal = Field(..., ge=0, le=999999999)
     closingDay: int = Field(..., ge=1, le=31)
     dueDay: int = Field(..., ge=1, le=31)
     color: str = Field(default="#171717", min_length=1, max_length=20)
@@ -1509,13 +1814,45 @@ class CardPayload(BaseModel):
 class InstallmentPayload(BaseModel):
     title: str = Field(..., min_length=1, max_length=200)
     categoryId: Optional[int] = Field(default=None, ge=1)
-    totalAmount: float = Field(..., gt=0, le=999999999)
+    totalAmount: Decimal = Field(..., gt=0, le=999999999)
     totalInstallments: int = Field(..., ge=2, le=24)
     purchaseDate: str = Field(..., min_length=10, max_length=10)
     notes: str = Field(default="", max_length=1000)
 
     class Config:
         extra = "forbid"
+
+
+class PurchaseSimulationPayload(BaseModel):
+    totalAmount: Decimal = Field(..., gt=0, le=999999999)
+    totalInstallments: int = Field(..., ge=2, le=24)
+    purchaseDate: str = Field(..., min_length=10, max_length=10)
+    months: int = Field(default=12, ge=1, le=24)
+
+    class Config:
+        extra = "forbid"
+
+
+class CsvColumnMapping(BaseModel):
+    date: str = Field(..., min_length=1, max_length=120)
+    description: str = Field(..., min_length=1, max_length=120)
+    value: str = Field(..., min_length=1, max_length=120)
+    type: Optional[str] = Field(default=None, max_length=120)
+
+    class Config:
+        extra = "forbid"
+
+
+class CsvImportPreviewPayload(BaseModel):
+    importToken: str = Field(..., min_length=16, max_length=200)
+    mapping: CsvColumnMapping
+
+    class Config:
+        extra = "forbid"
+
+
+class CsvImportConfirmPayload(CsvImportPreviewPayload):
+    pass
 
 
 class PinPayload(BaseModel):
@@ -1549,6 +1886,72 @@ class RecurringPayload(BaseModel):
 
     class Config:
         extra = "forbid"
+
+
+def validate_csv_mapping(columns: list[str], mapping: CsvColumnMapping) -> None:
+    required = [mapping.date, mapping.description, mapping.value]
+    if mapping.type:
+        required.append(mapping.type)
+    missing = [column for column in required if column not in columns]
+    if missing:
+        raise HTTPException(status_code=400, detail=f"Colunas não encontradas: {', '.join(missing)}.")
+
+
+def get_csv_import_session(user_id: str, token: str) -> dict:
+    session = csv_import_sessions.get(token)
+    if not session or session["user_id"] != user_id:
+        raise HTTPException(status_code=404, detail="Importação não encontrada ou expirada.")
+    return session
+
+
+def cleanup_csv_import_sessions() -> None:
+    cutoff = datetime.now(timezone.utc) - timedelta(minutes=30)
+    for token, session in list(csv_import_sessions.items()):
+        created_at = session.get("created_at")
+        if not isinstance(created_at, datetime) or created_at < cutoff:
+            csv_import_sessions.pop(token, None)
+
+
+def build_csv_import_preview(user_id: str, session: dict, mapping: CsvColumnMapping) -> dict:
+    validate_csv_mapping(session["columns"], mapping)
+
+    parsed_rows: list[dict] = []
+    errors_list: list[dict] = []
+    for index, row in enumerate(session["rows"], start=1):
+        try:
+            transaction_date = parse_import_date(row.get(mapping.date))
+            description = clean_text(row.get(mapping.description, ""), "Descrição", 200)
+            signed_amount = parse_decimal_text(row.get(mapping.value))
+            transaction_type = parse_import_type(row.get(mapping.type) if mapping.type else None, signed_amount)
+            amount = round_money(abs(signed_amount))
+            if amount <= 0:
+                raise ValueError("Valor precisa ser maior que zero.")
+            duplicate_hash = build_duplicate_hash(user_id, transaction_date, description, amount)
+            parsed_rows.append(
+                {
+                    "line": index,
+                    "transactionDate": transaction_date,
+                    "title": description,
+                    "rawDescription": row.get(mapping.description, ""),
+                    "amount": amount,
+                    "type": transaction_type,
+                    "duplicateHash": duplicate_hash,
+                }
+            )
+        except (ValueError, HTTPException) as exc:
+            detail = exc.detail if isinstance(exc, HTTPException) else str(exc)
+            errors_list.append({"line": index, "detail": detail})
+
+    return {
+        "importToken": session["token"],
+        "columns": session["columns"],
+        "totalRows": len(session["rows"]),
+        "validRows": len(parsed_rows),
+        "invalidRows": len(errors_list),
+        "preview": parsed_rows[:CSV_IMPORT_PREVIEW_LIMIT],
+        "errors": errors_list[:CSV_IMPORT_PREVIEW_LIMIT],
+        "rows": parsed_rows,
+    }
 
 
 @app.get("/api/health")
@@ -1615,7 +2018,7 @@ def register(request: Request, payload: RegisterPayload) -> dict:
         raise HTTPException(status_code=400, detail="E-mail j\u00e1 cadastrado.")
 
     audit_log("user_registered", str(user["id"]), {"email_hash": email_hash(email)})
-    return {"access_token": create_access_token(user["id"]), "token_type": "bearer"}
+    return {"access_token": create_access_token(user["id"]), "token_type": "bearer"}  # nosec B105
 
 
 @app.post("/api/auth/login")
@@ -1636,7 +2039,7 @@ def login(
         raise HTTPException(status_code=401, detail="E-mail ou senha inv\u00e1lidos.")
 
     audit_log("login_success", str(user["id"]), {"email_hash": email_hash(email_value)})
-    return {"access_token": create_access_token(user["id"]), "token_type": "bearer"}
+    return {"access_token": create_access_token(user["id"]), "token_type": "bearer"}  # nosec B105
 
 
 @app.get("/api/auth/me")
@@ -1778,6 +2181,102 @@ def transaction_suggestions(month: Optional[str] = None, current_user: dict = De
     return get_recurring_suggestions(current_user["id"], month_key)
 
 
+@app.post("/api/imports/csv/upload")
+def upload_csv_import(file: UploadFile = File(...), current_user: dict = Depends(get_current_user)) -> dict:
+    cleanup_csv_import_sessions()
+    filename = file.filename or ""
+    content_type = (file.content_type or "").split(";")[0].strip().lower()
+    if not filename.lower().endswith(".csv"):
+        raise HTTPException(status_code=400, detail="Envie um arquivo com extensão .csv.")
+    if content_type not in CSV_IMPORT_ALLOWED_CONTENT_TYPES:
+        raise HTTPException(status_code=400, detail="Content-Type de CSV inválido.")
+
+    content = file.file.read(CSV_IMPORT_MAX_BYTES + 1)
+    if len(content) > CSV_IMPORT_MAX_BYTES:
+        raise HTTPException(status_code=413, detail="CSV excede o tamanho máximo de 1 MB.")
+
+    columns, rows = parse_csv_rows(content)
+    token = secrets.token_urlsafe(32)
+    csv_import_sessions[token] = {
+        "token": token,
+        "user_id": current_user["id"],
+        "filename": filename,
+        "columns": columns,
+        "rows": rows,
+        "created_at": datetime.now(timezone.utc),
+    }
+    return {
+        "importToken": token,
+        "filename": filename,
+        "columns": columns,
+        "totalRows": len(rows),
+        "preview": rows[:CSV_IMPORT_PREVIEW_LIMIT],
+    }
+
+
+@app.post("/api/imports/csv/preview")
+def preview_csv_import(payload: CsvImportPreviewPayload, current_user: dict = Depends(get_current_user)) -> dict:
+    session = get_csv_import_session(current_user["id"], payload.importToken)
+    preview = build_csv_import_preview(current_user["id"], session, payload.mapping)
+    preview.pop("rows", None)
+    return preview
+
+
+@app.post("/api/imports/csv/confirm")
+def confirm_csv_import(payload: CsvImportConfirmPayload, current_user: dict = Depends(get_current_user)) -> dict:
+    user_id = current_user["id"]
+    session = get_csv_import_session(user_id, payload.importToken)
+    preview = build_csv_import_preview(user_id, session, payload.mapping)
+
+    imported: list[dict] = []
+    duplicates: list[dict] = []
+    with db_cursor(commit=True) as cursor:
+        for row in preview["rows"]:
+            cursor.execute(
+                """
+                SELECT id
+                FROM transactions
+                WHERE user_id = %s AND duplicate_hash = %s
+                LIMIT 1
+                """,
+                (user_id, row["duplicateHash"]),
+            )
+            if cursor.fetchone():
+                duplicates.append(row)
+                continue
+
+            cursor.execute(
+                """
+                INSERT INTO transactions
+                  (user_id, title, amount, type, category_id, payment_method, transaction_date, notes, card_id,
+                   billing_month, installment_group, installment_number, total_installments, source, external_id,
+                   imported_at, raw_description, duplicate_hash)
+                VALUES (%s, %s, %s, %s, NULL, 'csv_import', %s, '', NULL, NULL, NULL, NULL, NULL,
+                        'csv_import', %s, NOW(), %s, %s)
+                RETURNING *
+                """,
+                (
+                    user_id,
+                    row["title"],
+                    row["amount"],
+                    row["type"],
+                    row["transactionDate"],
+                    row["duplicateHash"],
+                    row["rawDescription"],
+                    row["duplicateHash"],
+                ),
+            )
+            imported.append(require_row(normalize_row(cursor.fetchone()), "Lançamento importado não criado."))
+
+    csv_import_sessions.pop(payload.importToken, None)
+    return {
+        "imported": len(imported),
+        "duplicates": len(duplicates),
+        "invalidRows": preview["invalidRows"],
+        "transactions": imported,
+    }
+
+
 @app.get("/api/goals")
 def goals(month: Optional[str] = None, current_user: dict = Depends(get_current_user)) -> dict:
     month_key = validate_month_text(month) or get_current_month()
@@ -1857,6 +2356,7 @@ def unlock_card(
     card_id: int,
     payload: PinPayload,
     month: Optional[str] = None,
+    categoryId: Optional[int] = Query(default=None, ge=1),
     current_user: dict = Depends(get_current_user),
 ) -> dict:
     user_id = current_user["id"]
@@ -1887,38 +2387,79 @@ def unlock_card(
 
     clear_card_pin_failures(user_id, card_id)
     audit_log("card_unlocked", user_id, {"card_id": card_id})
-    return get_unlocked_card_details(user_id, card_id, month_key, include_token=True)
+    return get_unlocked_card_details(user_id, card_id, month_key, include_token=True, category_id=categoryId)
 
 
 @app.get("/api/cards/{card_id}/simulate-invoices")
 def simulate_invoices_route(
     card_id: int,
     months: int = Query(12, ge=1, le=24),
+    month: Optional[str] = None,
+    categoryId: Optional[int] = Query(default=None, ge=1),
     x_card_unlock_token: str = Header(..., alias="X-Card-Unlock-Token"),
     current_user: dict = Depends(get_current_user),
 ) -> list[dict]:
     user_id = current_user["id"]
+    month_key = validate_month_text(month) or get_current_month()
     get_card_for_user(user_id, card_id)
     verify_card_unlock_session(user_id, card_id, x_card_unlock_token)
-    return simulate_card_invoices(user_id, card_id, get_current_month(), months)
+    return simulate_card_invoices(user_id, card_id, month_key, months, categoryId)
+
+
+@app.post("/api/cards/{card_id}/purchase-simulation")
+def simulate_card_purchase(
+    card_id: int,
+    payload: PurchaseSimulationPayload,
+    current_user: dict = Depends(get_current_user),
+) -> dict:
+    user_id = current_user["id"]
+    get_card_for_user(user_id, card_id)
+    purchase_date = validate_date_text(payload.purchaseDate, "Data da compra")
+    base_month = month_key_from_date(purchase_date)
+    installment_amounts = distribute_installments(payload.totalAmount, payload.totalInstallments)
+    current_invoices = simulate_card_invoices(user_id, card_id, base_month, payload.months)
+    simulated_by_month = {
+        add_months(base_month, index): amount for index, amount in enumerate(installment_amounts)
+    }
+
+    projection = []
+    for invoice in current_invoices:
+        simulated_amount = round_money(simulated_by_month.get(invoice["month"], Decimal("0")))
+        projection.append(
+            {
+                "month": invoice["month"],
+                "currentInvoice": invoice["projected_total"],
+                "simulatedInstallment": simulated_amount,
+                "projectedTotal": round_money(invoice["projected_total"] + simulated_amount),
+            }
+        )
+
+    return {
+        "cardId": card_id,
+        "totalAmount": round_money(payload.totalAmount),
+        "totalInstallments": payload.totalInstallments,
+        "installments": installment_amounts,
+        "projection": projection,
+    }
 
 
 @app.post("/api/settings")
 def save_settings(payload: SettingsPayload, current_user: dict = Depends(get_current_user)) -> dict:
     user_id = current_user["id"]
     current = get_settings(user_id)
-    monthly_income = payload.monthlyIncome if payload.monthlyIncome is not None else current["monthly_income"]
-    daily_goal = payload.dailyGoal if payload.dailyGoal is not None else current["daily_goal"]
+    monthly_income = round_money(payload.monthlyIncome if payload.monthlyIncome is not None else current["monthly_income"])
+    daily_goal = round_money(payload.dailyGoal if payload.dailyGoal is not None else current["daily_goal"])
+    reserve_amount = round_money(payload.reserveAmount if payload.reserveAmount is not None else current["reserve_amount"])
 
     with db_cursor(commit=True) as cursor:
         cursor.execute(
             """
             UPDATE settings
-            SET monthly_income = %s, daily_goal = %s
+            SET monthly_income = %s, daily_goal = %s, reserve_amount = %s
             WHERE user_id = %s AND id = 1
             RETURNING *
             """,
-            (monthly_income, daily_goal, user_id),
+            (monthly_income, daily_goal, reserve_amount, user_id),
         )
         row = normalize_row(cursor.fetchone())
     return row or get_settings(user_id)
@@ -1969,14 +2510,14 @@ def create_transaction(payload: TransactionPayload, current_user: dict = Depends
                 """
                 INSERT INTO transactions
                   (user_id, title, amount, type, category_id, payment_method, transaction_date, notes, card_id, billing_month,
-                   installment_group, installment_number, total_installments, is_recurring, recurrence_type, recurrence_day)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NULL, NULL, NULL, %s, %s, %s)
+                   installment_group, installment_number, total_installments, is_recurring, recurrence_type, recurrence_day, source)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NULL, NULL, NULL, %s, %s, %s, 'manual')
                 RETURNING *
                 """,
                 (
                     user_id,
                     title,
-                    payload.amount,
+                    round_money(payload.amount),
                     payload.type,
                     payload.categoryId,
                     payment_method,
@@ -2064,7 +2605,7 @@ def export_csv(request: Request, month: Optional[str] = None, current_user: dict
                 row.get("title") or "",
                 row.get("category_name") or "",
                 row.get("type") or "",
-                f"{float(row.get('amount') or 0):.2f}",
+                f"{round_money(row.get('amount') or 0):.2f}",
                 row.get("payment_method") or "",
                 row.get("card_name") or "",
                 installment,
@@ -2170,13 +2711,13 @@ def export_pdf(request: Request, month: Optional[str] = None, current_user: dict
     totals = get_month_totals(user_id, month_key)
     score_data = calculate_score(user_id, month_key)
     rows = get_export_transactions(user_id, month_key)
-    balance = float(settings["monthly_income"] or 0) + totals["inflow"] - totals["outflow"]
+    balance = round_money(settings["monthly_income"] or 0) + totals["inflow"] - totals["outflow"]
 
     lines = [
         "Ritmo Financeiro Pro",
         f"Relatorio financeiro - {month_key}",
         "",
-        f"Salario base: {format_brl(float(settings['monthly_income'] or 0))}",
+        f"Salario base: {format_brl(settings['monthly_income'] or 0)}",
         f"Entradas: {format_brl(totals['inflow'])}",
         f"Saidas: {format_brl(totals['outflow'])}",
         f"Saldo projetado: {format_brl(balance)}",
@@ -2199,7 +2740,7 @@ def export_pdf(request: Request, month: Optional[str] = None, current_user: dict
                     str(row.get("title") or ""),
                     str(row.get("category_name") or "Sem categoria"),
                     str(row.get("payment_method") or ""),
-                    f"{sign}{format_brl(float(row.get('amount') or 0))}{installment}",
+                    f"{sign}{format_brl(row.get('amount') or 0)}{installment}",
                 ]
             )
         )
@@ -2225,7 +2766,7 @@ def create_card(payload: CardPayload, current_user: dict = Depends(get_current_u
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING *
             """,
-            (user_id, name, brand, last_four, payload.creditLimit, payload.closingDay, payload.dueDay, color),
+            (user_id, name, brand, last_four, round_money(payload.creditLimit), payload.closingDay, payload.dueDay, color),
         )
         row = require_row(normalize_row(cursor.fetchone()), "Cart\u00e3o n\u00e3o criado.")
     return row
@@ -2238,7 +2779,10 @@ def create_installments(card_id: int, payload: InstallmentPayload, current_user:
     notes = clean_text(payload.notes, "Observa\u00e7\u00f5es", 1000, required=False)
     purchase_date = validate_date_text(payload.purchaseDate, "Data da compra")
     base_month = month_key_from_date(purchase_date)
-    amount_per = round(payload.totalAmount / payload.totalInstallments, 2)
+    try:
+        installment_amounts = distribute_installments(payload.totalAmount, payload.totalInstallments)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     try:
         with db_cursor(commit=True) as cursor:
@@ -2255,18 +2799,18 @@ def create_installments(card_id: int, payload: InstallmentPayload, current_user:
                 raise HTTPException(status_code=404, detail="Cart\u00e3o n\u00e3o encontrado.")
 
             group = f"{user_id}-{card_id}-{title}-{purchase_date}"
-            for number in range(1, payload.totalInstallments + 1):
+            for number, amount in enumerate(installment_amounts, start=1):
                 cursor.execute(
                     """
                     INSERT INTO transactions
                       (user_id, title, amount, type, category_id, payment_method, transaction_date, notes, card_id,
-                       billing_month, installment_group, installment_number, total_installments)
-                    VALUES (%s, %s, %s, 'expense', %s, 'cr\u00e9dito', %s, %s, %s, %s, %s, %s, %s)
+                       billing_month, installment_group, installment_number, total_installments, source)
+                    VALUES (%s, %s, %s, 'expense', %s, 'cr\u00e9dito', %s, %s, %s, %s, %s, %s, %s, 'manual')
                     """,
                     (
                         user_id,
                         title,
-                        amount_per,
+                        amount,
                         payload.categoryId,
                         purchase_date,
                         notes,
@@ -2338,33 +2882,5 @@ def delete_transaction(transaction_id: int, current_user: dict = Depends(get_cur
 
 
 @app.get("/")
-def index() -> FileResponse:
-    return FileResponse(PUBLIC_DIR / "index.html")
-
-
-@app.get("/metas")
-def metas() -> FileResponse:
-    return FileResponse(PUBLIC_DIR / "metas.html")
-
-
-@app.get("/cartoes")
-def cartoes() -> FileResponse:
-    return FileResponse(PUBLIC_DIR / "cartoes.html")
-
-
-@app.get("/perfil")
-def perfil() -> FileResponse:
-    return FileResponse(PUBLIC_DIR / "perfil.html")
-
-
-@app.get("/login")
-def login_page() -> FileResponse:
-    return FileResponse(PUBLIC_DIR / "login.html")
-
-
-@app.get("/register")
-def register_page() -> FileResponse:
-    return FileResponse(PUBLIC_DIR / "register.html")
-
-
-app.mount("/", StaticFiles(directory=PUBLIC_DIR, html=True), name="public")
+def api_root() -> dict:
+    return {"service": "Ritmo Financeiro Pro API", "docs": "/docs", "health": "/api/health"}

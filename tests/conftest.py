@@ -10,8 +10,7 @@ from httpx import ASGITransport, AsyncClient
 os.environ.setdefault("JWT_SECRET_KEY", "test-secret-key-for-local-tests-32chars")
 os.environ.setdefault("ENVIRONMENT", "testing")
 
-from app.main import app, limiter  # noqa: E402
-from app.core.database import close_db_pool, db_cursor, init_db_pool  # noqa: E402
+from app.main import app, close_db_pool, db_cursor, init_db_pool, limiter  # noqa: E402
 
 TEST_DB_URL = os.getenv("TEST_DATABASE_URL")
 requires_db = pytest.mark.skipif(not TEST_DB_URL, reason="TEST_DATABASE_URL is not configured")

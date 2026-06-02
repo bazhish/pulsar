@@ -4,7 +4,7 @@ import pytest
 from fastapi import HTTPException
 
 import app.main as main_module
-from app.services.card_service import enforce_card_pin_rate_limit, record_card_pin_failure
+from app.main import enforce_card_pin_rate_limit, record_card_pin_failure
 
 
 def test_pin_rate_limit_blocks_after_max_attempts():

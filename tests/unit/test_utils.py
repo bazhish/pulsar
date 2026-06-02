@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.services.finance_service import add_months, month_range
+from app.main import add_months, get_month_range
 
 
 def test_add_months_forward_and_backward():
@@ -9,4 +9,4 @@ def test_add_months_forward_and_backward():
 
 
 def test_month_range_regular_month():
-    assert month_range("2024-04") == ("2024-04-01", "2024-04-30")
+    assert get_month_range("2024-04") == ("2024-04-01", "2024-04-30")
