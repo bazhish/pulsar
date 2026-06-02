@@ -1,11 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { BarChart3, CalendarDays, CreditCard, PiggyBank, ReceiptText } from "lucide-react";
+import { CalendarDays, CreditCard, Home, PiggyBank, ReceiptText } from "lucide-react";
 
 const links = [
-  { href: "/dashboard", label: "Inicio", icon: BarChart3 },
-  { href: "/transacoes", label: "Lancamentos", icon: ReceiptText },
+  { href: "/dashboard", label: "Resumo", icon: Home },
+  { href: "/transacoes", label: "Movimentos", icon: ReceiptText },
   { href: "/metas", label: "Metas", icon: CalendarDays },
   { href: "/orcamento", label: "Orcamento", icon: PiggyBank },
   { href: "/cartoes", label: "Cartoes", icon: CreditCard }

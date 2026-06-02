@@ -119,3 +119,39 @@ async def test_initial_backend_flow_and_user_isolation(client):
 
     protected_response = await client.get("/api/bootstrap?month=2024-05")
     assert protected_response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_salary_update_persists_across_bootstrap_and_login(client):
+    user = await register_user(client)
+    headers = {"Authorization": f"Bearer {user['token']}"}
+
+    initial_response = await client.get("/api/bootstrap?month=2024-05", headers=headers)
+    assert initial_response.status_code == 200, initial_response.text
+    initial = initial_response.json()
+    assert initial["settings"]["monthly_income"] == 0
+    assert initial["dashboard"]["salaryBase"] == 0
+
+    settings_response = await client.post(
+        "/api/settings",
+        headers=headers,
+        json={"monthlyIncome": 2500, "dailyGoal": 90, "reserveAmount": 200},
+    )
+    assert settings_response.status_code == 200, settings_response.text
+    assert settings_response.json()["monthly_income"] == 2500
+
+    bootstrap_response = await client.get("/api/bootstrap?month=2024-05", headers=headers)
+    assert bootstrap_response.status_code == 200, bootstrap_response.text
+    bootstrap = bootstrap_response.json()
+    assert bootstrap["settings"]["monthly_income"] == 2500
+    assert bootstrap["dashboard"]["salaryBase"] == 2500
+    assert bootstrap["dashboard"]["monthlyIncome"] == 2500
+
+    login_response = await client.post("/api/auth/login", data={"email": user["email"], "password": "Senha123"})
+    assert login_response.status_code == 200
+    next_headers = {"Authorization": f"Bearer {login_response.json()['access_token']}"}
+    after_login_response = await client.get("/api/bootstrap?month=2024-05", headers=next_headers)
+    assert after_login_response.status_code == 200, after_login_response.text
+    after_login = after_login_response.json()
+    assert after_login["settings"]["monthly_income"] == 2500
+    assert after_login["dashboard"]["salaryBase"] == 2500

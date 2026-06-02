@@ -2,6 +2,8 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { FileUp, Wand2 } from "lucide-react";
+import { EmptyState } from "@/components/EmptyState";
+import { SectionIntro } from "@/components/SectionIntro";
 import { Shell } from "@/components/Shell";
 import { api } from "@/lib/api";
 import { formatBRL } from "@/lib/format";
@@ -76,12 +78,17 @@ export default function ImportarPage() {
       <div className="mx-auto max-w-5xl px-4 py-5 sm:py-6">
         <header className="mb-5">
           <h1 className="flex items-center gap-2 text-2xl font-bold"><FileUp size={24} /> Importar extrato</h1>
-          <p className="text-sm text-muted">CSV com revisao antes de salvar</p>
+          <p className="text-sm text-muted">Traga movimentacoes em CSV, revise e so depois salve.</p>
         </header>
 
         {message ? <p className="mb-4 rounded-app border border-line bg-white p-3 text-sm shadow-soft">{message}</p> : null}
 
         <form onSubmit={handleUpload} className="rounded-app border border-line bg-white p-4 shadow-soft">
+          <SectionIntro
+            title="Enviar arquivo"
+            description="Escolha um CSV do seu banco ou planilha. O app mostra uma previa antes de gravar qualquer movimentacao."
+            helpText="Depois do envio, confira quais colunas representam data, descricao e valor."
+          />
           <label className="block text-sm">
             Arquivo CSV
             <input className="field mt-1" name="file" type="file" accept=".csv,text/csv" required />
@@ -91,7 +98,11 @@ export default function ImportarPage() {
 
         {upload ? (
           <section className="mt-4 rounded-app border border-line bg-white p-4 shadow-soft">
-            <h2 className="font-semibold">Mapeamento</h2>
+            <SectionIntro
+              title="Mapeamento"
+              description="Diga qual coluna do CSV corresponde a cada informacao financeira."
+              helpText="A coluna Tipo e opcional. Se ela nao existir, o app tenta inferir por valor positivo ou negativo."
+            />
             <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
               {(["date", "description", "value", "type"] as const).map((field) => (
                 <label key={field} className="text-sm">
@@ -129,10 +140,25 @@ export default function ImportarPage() {
               {preview.errors.map((error) => <p key={`${error.line}-${error.detail}`} className="py-2 text-sm text-coral">Linha {error.line}: {error.detail}</p>)}
             </div>
           </section>
+        ) : upload ? (
+          <div className="mt-4">
+            <EmptyState
+              title="Previa ainda nao gerada"
+              description="Confira o mapeamento das colunas e clique em Ver previa para revisar as movimentacoes antes de importar."
+              actionLabel="Ver previa"
+              onAction={() => handlePreview().catch(console.error)}
+              icon={FileUp}
+            />
+          </div>
         ) : null}
 
         <form onSubmit={createRule} className="mt-4 rounded-app border border-line bg-white p-4 shadow-soft">
-          <h2 className="flex items-center gap-2 font-semibold"><Wand2 size={18} /> Regra de categorizacao</h2>
+          <SectionIntro
+            title="Regra de categorizacao"
+            description="Crie atalhos para o app classificar importacoes futuras automaticamente."
+            helpText="Exemplo: se a descricao tiver ifood, enviar para Alimentacao."
+            action={<Wand2 size={18} className="text-pulse" />}
+          />
           <div className="mt-3 grid gap-3 md:grid-cols-[1fr_220px_180px_auto]">
             <input className="field" name="pattern" placeholder="Ex: ifood, uber, netflix" required />
             <select className="field" name="categoryId" required>

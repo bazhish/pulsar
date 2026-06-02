@@ -2,11 +2,11 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { BarChart3, CalendarDays, CreditCard, FileText, PiggyBank, ReceiptText, Upload, UserRound } from "lucide-react";
+import { CalendarDays, CreditCard, FileText, Home, PiggyBank, ReceiptText, Upload, UserRound } from "lucide-react";
 
 const links = [
-  { href: "/dashboard", label: "Dashboard", icon: BarChart3 },
-  { href: "/transacoes", label: "Transacoes", icon: ReceiptText },
+  { href: "/dashboard", label: "Resumo", icon: Home },
+  { href: "/transacoes", label: "Movimentacoes", icon: ReceiptText },
   { href: "/metas", label: "Metas", icon: CalendarDays },
   { href: "/orcamento", label: "Orcamento", icon: PiggyBank },
   { href: "/cartoes", label: "Cartoes", icon: CreditCard },
@@ -22,7 +22,7 @@ export function Sidebar() {
         <Image src="/logo-mark.svg" width={42} height={42} alt="Ritmo Financeiro Pro" />
         <span>
           <strong className="block leading-tight">Ritmo Financeiro</strong>
-          <small className="text-muted">Assistente pessoal</small>
+          <small className="text-muted">Organizacao simples</small>
         </span>
       </Link>
       <nav className="space-y-1" aria-label="Principal">

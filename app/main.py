@@ -3491,7 +3491,7 @@ def export_pdf(request: Request, month: Optional[str] = None, current_user: dict
         f"Saldo projetado: {format_brl(balance)}",
         f"Ritmo Score: {score_data['score']} - {score_data['label']}",
         "",
-        "Transacoes",
+        "Movimentacoes",
     ]
 
     if not rows:

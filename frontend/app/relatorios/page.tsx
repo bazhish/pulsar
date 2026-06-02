@@ -4,8 +4,10 @@ import { useEffect, useState } from "react";
 import { Download, FileText } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { ChartCard } from "@/components/ChartCard";
+import { EmptyState } from "@/components/EmptyState";
 import { KpiCard } from "@/components/KpiCard";
 import { MonthPicker } from "@/components/MonthPicker";
+import { SectionIntro } from "@/components/SectionIntro";
 import { Shell } from "@/components/Shell";
 import { api } from "@/lib/api";
 import { formatBRL } from "@/lib/format";
@@ -48,7 +50,7 @@ export default function RelatoriosPage() {
         <header className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="flex items-center gap-2 text-2xl font-bold"><FileText size={24} /> Relatorios</h1>
-            <p className="text-sm text-muted">{month}</p>
+            <p className="text-sm text-muted">Analise o mes com calma ou exporte CSV/PDF.</p>
           </div>
           <MonthPicker value={month} onChange={setMonth} />
         </header>
@@ -59,7 +61,7 @@ export default function RelatoriosPage() {
           <KpiCard label="Entradas" value={formatBRL(report?.dashboard.inflow || 0)} tone="good" />
           <KpiCard label="Saidas" value={formatBRL(report?.dashboard.outflow || 0)} />
           <KpiCard label="Saldo projetado" value={formatBRL(report?.dashboard.projectedBalance || 0)} tone={(report?.dashboard.projectedBalance || 0) < 0 ? "danger" : "good"} />
-          <KpiCard label="Score interno" value={String(report?.score.score || "--")} note={report?.score.label} />
+          <KpiCard label="Ritmo Score" value={String(report?.score.score || "--")} note={report?.score.label} />
         </div>
 
         <section className="mt-4 flex flex-wrap gap-2">
@@ -73,8 +75,13 @@ export default function RelatoriosPage() {
 
         <div className="mt-4 grid gap-4 xl:grid-cols-2">
           <ChartCard title="Categorias">
+            <SectionIntro
+              title="Gastos por categoria"
+              description="Compare onde o dinheiro saiu no mes."
+              helpText="Use este grafico para achar categorias que merecem limite no Orcamento."
+            />
             <div className="h-64">
-              {chartsReady ? <ResponsiveContainer width="100%" height="100%">
+              {categoryRows.length && chartsReady ? <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={categoryRows}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
                   <XAxis dataKey="name" tickLine={false} axisLine={false} />
@@ -82,11 +89,16 @@ export default function RelatoriosPage() {
                   <Tooltip formatter={(value) => formatBRL(Number(value))} />
                   <Bar dataKey="total" fill="#14B8A6" radius={[6, 6, 0, 0]} />
                 </BarChart>
-              </ResponsiveContainer> : null}
+              </ResponsiveContainer> : <EmptyState title="Sem categorias para analisar" description="Cadastre despesas para gerar o relatorio por categoria." actionLabel="Cadastrar despesa" href="/transacoes" icon={FileText} />}
             </div>
           </ChartCard>
 
           <ChartCard title="Composicao do score">
+            <SectionIntro
+              title="Ritmo Score"
+              description="Entenda os fatores que puxam seu score para cima ou para baixo."
+              helpText="O score resume uso do salario, metas, reservas e organizacao do mes."
+            />
             <div className="space-y-3">
               {Object.entries(report?.score.breakdown || {}).map(([key, value]) => (
                 <div key={key}>
@@ -99,12 +111,19 @@ export default function RelatoriosPage() {
                   </div>
                 </div>
               ))}
+              {!Object.entries(report?.score.breakdown || {}).length ? (
+                <EmptyState title="Score ainda sem composicao" description="O score aparece quando houver planejamento e movimentacoes no mes." icon={FileText} />
+              ) : null}
             </div>
           </ChartCard>
         </div>
 
         <section className="mt-4 rounded-app border border-line bg-white p-4 shadow-soft">
-          <h2 className="font-semibold">Orcamento por categoria</h2>
+          <SectionIntro
+            title="Orcamento por categoria"
+            description="Veja os limites planejados e o quanto ja foi usado em cada categoria."
+            helpText="Se esta area estiver vazia, va em Orcamento e crie limites para o mes."
+          />
           <div className="mt-3 grid gap-2 md:grid-cols-2">
             {(report?.budget.items || []).map((item) => (
               <div key={item.id} className="rounded-app border border-line p-3 text-sm">
@@ -113,6 +132,9 @@ export default function RelatoriosPage() {
               </div>
             ))}
           </div>
+          {!report?.budget.items.length ? (
+            <EmptyState title="Nenhum orcamento no relatorio" description="Crie limites por categoria para acompanhar o planejado contra o gasto." actionLabel="Criar orcamento" href="/orcamento" icon={FileText} />
+          ) : null}
         </section>
       </div>
     </Shell>
