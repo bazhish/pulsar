@@ -21,10 +21,10 @@ const barClass = {
 
 export function BudgetCategoryCard({ item }: { item: BudgetItem }) {
   return (
-    <article className="rounded-app border border-line bg-white p-4 shadow-soft">
+    <article className="app-card p-4">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <h3 className="truncate font-semibold">{item.categoryName}</h3>
+          <h3 className="truncate font-bold">{item.categoryName}</h3>
           <p className="mt-1 text-sm text-muted">Quanto voce quer gastar nessa categoria este mes.</p>
         </div>
         <span className={`rounded-app px-2 py-1 text-xs font-semibold ${statusClass[item.status]}`}>{statusLabel[item.status]}</span>
@@ -32,15 +32,15 @@ export function BudgetCategoryCard({ item }: { item: BudgetItem }) {
       <dl className="mt-4 grid grid-cols-3 gap-2 text-sm">
         <div>
           <dt className="text-muted">Planejado</dt>
-          <dd className="font-semibold">{formatBRL(item.plannedAmount)}</dd>
+          <dd className="metric-number">{formatBRL(item.plannedAmount)}</dd>
         </div>
         <div>
           <dt className="text-muted">Gasto</dt>
-          <dd className="font-semibold">{formatBRL(item.spent)}</dd>
+          <dd className="metric-number">{formatBRL(item.spent)}</dd>
         </div>
         <div>
           <dt className="text-muted">Restante</dt>
-          <dd className={item.remaining < 0 ? "font-semibold text-coral" : "font-semibold text-leaf"}>{formatBRL(item.remaining)}</dd>
+          <dd className={item.remaining < 0 ? "metric-number text-coral" : "metric-number text-leaf"}>{formatBRL(item.remaining)}</dd>
         </div>
       </dl>
       <div className="mt-4 h-2 rounded-full bg-ink/10">

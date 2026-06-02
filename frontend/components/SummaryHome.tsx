@@ -51,7 +51,7 @@ export function SummaryHome({ data, chartsReady, onEditPlanning }: SummaryHomePr
         <KpiCard label="Ritmo Score" value={String(data?.score.score || "--")} note={data?.score.label} tone={tone} />
       </div>
 
-      <section className="rounded-app border border-line bg-white p-4 shadow-soft">
+      <section className="app-card p-4">
         <SectionIntro
           title="Categorias do mes"
           description="Veja quais areas mais consumiram seu dinheiro neste mes. Isso ajuda a identificar onde voce pode economizar."
@@ -73,7 +73,7 @@ export function SummaryHome({ data, chartsReady, onEditPlanning }: SummaryHomePr
             </div>
             <div className="space-y-2">
               {pieData.slice(0, 6).map((item) => (
-                <div key={item.name} className="flex items-center justify-between gap-3 rounded-app bg-ink/5 p-3 text-sm">
+                <div key={item.name} className="flex items-center justify-between gap-3 rounded-app bg-white/75 p-3 text-sm shadow-sm">
                   <span className="flex items-center gap-2">
                     <span className="h-3 w-3 rounded-full" style={{ backgroundColor: item.color }} />
                     {item.name}
@@ -95,7 +95,7 @@ export function SummaryHome({ data, chartsReady, onEditPlanning }: SummaryHomePr
       </section>
 
       <section className="grid gap-4 xl:grid-cols-[0.95fr_1.05fr]">
-        <div className="rounded-app border border-line bg-white p-4 shadow-soft">
+        <div className="app-card p-4">
           <SectionIntro
             title="Formas de pagamento"
             description="Entenda se seus gastos estao concentrados em Pix, debito, credito ou dinheiro."
@@ -106,11 +106,11 @@ export function SummaryHome({ data, chartsReady, onEditPlanning }: SummaryHomePr
               {chartsReady ? (
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={paymentData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
+                    <CartesianGrid strokeDasharray="3 3" stroke="#DDE7F0" />
                     <XAxis dataKey="payment_method" tickLine={false} axisLine={false} />
                     <YAxis width={44} tickFormatter={(value) => `R$${Number(value) / 1000}k`} tickLine={false} axisLine={false} />
                     <Tooltip formatter={(value) => formatBRL(Number(value))} />
-                    <Bar dataKey="total" fill="#2563EB" radius={[6, 6, 0, 0]} />
+                    <Bar dataKey="total" fill="#4F46E5" radius={[10, 10, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               ) : null}
@@ -126,7 +126,7 @@ export function SummaryHome({ data, chartsReady, onEditPlanning }: SummaryHomePr
           )}
         </div>
 
-        <div className="rounded-app border border-line bg-white p-4 shadow-soft">
+        <div className="app-card p-4">
           <SectionIntro
             title="Movimentacoes recentes"
             description="Aqui aparecem suas movimentacoes mais recentes. Cadastre entradas e despesas para acompanhar seu fluxo financeiro."

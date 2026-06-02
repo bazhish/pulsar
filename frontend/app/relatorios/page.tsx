@@ -55,7 +55,7 @@ export default function RelatoriosPage() {
           <MonthPicker value={month} onChange={setMonth} />
         </header>
 
-        {message ? <p className="mb-4 rounded-app border border-line bg-white p-3 text-sm shadow-soft">{message}</p> : null}
+        {message ? <p className="app-card mb-4 p-3 text-sm">{message}</p> : null}
 
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <KpiCard label="Entradas" value={formatBRL(report?.dashboard.inflow || 0)} tone="good" />
@@ -118,7 +118,7 @@ export default function RelatoriosPage() {
           </ChartCard>
         </div>
 
-        <section className="mt-4 rounded-app border border-line bg-white p-4 shadow-soft">
+        <section className="app-card mt-4 p-4">
           <SectionIntro
             title="Orcamento por categoria"
             description="Veja os limites planejados e o quanto ja foi usado em cada categoria."

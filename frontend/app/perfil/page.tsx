@@ -3,6 +3,7 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { Settings, UserRound } from "lucide-react";
 import { KpiCard } from "@/components/KpiCard";
+import { SectionIntro } from "@/components/SectionIntro";
 import { Shell } from "@/components/Shell";
 import { api } from "@/lib/api";
 import { formatBRL } from "@/lib/format";
@@ -119,12 +120,13 @@ export default function PerfilPage() {
   return (
     <Shell>
       <div className="mx-auto max-w-5xl px-4 py-5 sm:py-6">
-        <header className="mb-5">
-          <h1 className="flex items-center gap-2 text-2xl font-bold"><UserRound size={24} /> Perfil</h1>
+        <header className="mb-5 rounded-app border border-white/70 bg-gradient-to-br from-white to-mint/70 p-4 shadow-soft">
+          <p className="flex items-center gap-2 text-sm font-bold text-pulse"><UserRound size={18} /> Perfil</p>
+          <h1 className="mt-1 text-2xl font-black">Ajustes da sua conta</h1>
           <p className="text-sm text-muted">{user?.email || ""}</p>
         </header>
 
-        {message ? <p className="mb-4 rounded-app border border-line bg-white p-3 text-sm shadow-soft">{message}</p> : null}
+        {message ? <p className="app-card mb-4 p-3 text-sm">{message}</p> : null}
 
         <div className="grid gap-3 md:grid-cols-3">
           <KpiCard label="Salario" value={formatBRL(boot?.settings.monthly_income || 0)} />
@@ -133,8 +135,12 @@ export default function PerfilPage() {
         </div>
 
         <section className="mt-4 grid gap-4 xl:grid-cols-2">
-          <form onSubmit={saveProfile} className="rounded-app border border-line bg-white p-4 shadow-soft">
-            <h2 className="mb-3 flex items-center gap-2 font-semibold"><Settings size={18} /> Dados pessoais</h2>
+          <form onSubmit={saveProfile} className="app-card p-4">
+            <SectionIntro
+              title="Dados pessoais"
+              description="Informacoes basicas usadas para personalizar o Resumo."
+              action={<Settings size={18} className="text-pulse" />}
+            />
             <label className="block text-sm">
               Nome
               <input className="field mt-1" value={profile.name} onChange={(event) => setProfile({ ...profile, name: event.target.value })} required />
@@ -150,8 +156,12 @@ export default function PerfilPage() {
             <button className="btn-primary mt-4" type="submit">Salvar perfil</button>
           </form>
 
-          <form onSubmit={saveSettings} className="rounded-app border border-line bg-white p-4 shadow-soft">
-            <h2 className="mb-3 font-semibold">Planejamento financeiro</h2>
+          <form onSubmit={saveSettings} className="app-card p-4">
+            <SectionIntro
+              title="Planejamento financeiro"
+              description="Valores usados nos calculos de ritmo, metas e saldo previsto."
+              helpText="Meta diaria em 0 deixa o app recomendar automaticamente."
+            />
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="text-sm">
                 Salario base
@@ -179,8 +189,11 @@ export default function PerfilPage() {
           </form>
         </section>
 
-        <form onSubmit={changePassword} className="mt-4 rounded-app border border-line bg-white p-4 shadow-soft">
-          <h2 className="mb-3 font-semibold">Senha</h2>
+        <form onSubmit={changePassword} className="app-card mt-4 p-4">
+          <SectionIntro
+            title="Senha"
+            description="Atualize sua senha quando precisar reforcar a seguranca."
+          />
           <div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto]">
             <input className="field" name="current_password" type="password" placeholder="Senha atual" required />
             <input className="field" name="new_password" type="password" placeholder="Nova senha" required />

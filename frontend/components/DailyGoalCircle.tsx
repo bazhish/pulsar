@@ -20,7 +20,7 @@ export function DailyGoalCircle({ day, active, onSelect }: DailyGoalCircleProps)
 
   return (
     <button
-      className={`focus-ring min-h-[108px] rounded-app border bg-white p-2 text-left shadow-soft ${active ? "border-ink" : "border-line"}`}
+      className={`focus-ring min-h-[108px] rounded-app border bg-white/95 p-2 text-left shadow-soft transition hover:-translate-y-0.5 ${active ? "border-pulse ring-2 ring-pulse/20" : "border-white/80"}`}
       type="button"
       onClick={onSelect}
     >
@@ -28,10 +28,10 @@ export function DailyGoalCircle({ day, active, onSelect }: DailyGoalCircleProps)
         className="mx-auto flex h-16 w-16 items-center justify-center rounded-full"
         style={{ background: `conic-gradient(${state.color} ${progress}%, #F3F4F6 ${progress}% 100%)` }}
       >
-        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-white text-base font-bold">{day.day}</div>
+        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-white text-base font-black">{day.day}</div>
       </div>
       <div className="mt-2 text-center">
-        <strong className="block text-xs">{formatBRL(day.spent)}</strong>
+        <strong className="metric-number block text-xs">{formatBRL(day.spent)}</strong>
         <span className={`text-[11px] font-semibold ${state.className}`}>{Math.round(progress)}% / {state.label}</span>
       </div>
     </button>

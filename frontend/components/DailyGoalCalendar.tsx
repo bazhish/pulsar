@@ -50,7 +50,7 @@ export function DailyGoalCalendar({ goal, transactions = [] }: DailyGoalCalendar
           <DailyGoalCircle key={day.day} day={day} active={activeDay?.day === day.day} onSelect={() => setSelectedDay(day)} />
         ))}
       </div>
-      <aside className="rounded-app border border-line bg-white p-4 shadow-soft">
+      <aside className="app-card p-4">
         <p className="text-xs font-semibold uppercase tracking-normal text-muted">Detalhes do dia</p>
         <h3 className="mt-1 text-xl font-bold">Dia {activeDay?.day || "--"}</h3>
         <dl className="mt-4 grid gap-2 text-sm">
@@ -71,7 +71,7 @@ export function DailyGoalCalendar({ goal, transactions = [] }: DailyGoalCalendar
           <h4 className="text-sm font-semibold">Principais despesas</h4>
           <div className="mt-2 space-y-2">
             {activeExpenses.map((item) => (
-              <div key={item.id} className="flex items-center justify-between gap-3 rounded-app bg-ink/5 p-2 text-sm">
+              <div key={item.id} className="flex items-center justify-between gap-3 rounded-app bg-mint/60 p-2 text-sm">
                 <span className="truncate">{item.title}</span>
                 <strong>{formatBRL(item.amount)}</strong>
               </div>

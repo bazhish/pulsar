@@ -47,8 +47,8 @@ export default function OnboardingPage() {
           title="Comece simples"
           description="Salario e reserva ja bastam para o Resumo funcionar. A meta diaria pode ficar vazia ou 0 para o app recomendar."
         />
-        {message ? <p className="mb-4 rounded-app border border-line bg-white p-3 text-sm shadow-soft">{message}</p> : null}
-        <form onSubmit={save} className="mt-4 rounded-app border border-line bg-white p-4 shadow-soft">
+        {message ? <p className="app-card mb-4 p-3 text-sm">{message}</p> : null}
+        <form onSubmit={save} className="app-card mt-4 p-4">
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="text-sm">
               Salario mensal

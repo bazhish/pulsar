@@ -37,14 +37,14 @@ export function ActionRecommendationCard({ dashboard, alerts, hasBudget, hasCard
   }
 
   return (
-    <section className="rounded-app border border-line bg-white p-4 shadow-soft">
-      <p className="text-xs font-semibold uppercase tracking-normal text-muted">Proxima melhor acao</p>
+    <section className="app-card p-4">
+      <p className="text-xs font-bold uppercase tracking-normal text-muted">Proxima melhor acao</p>
       <div className="mt-3 flex items-start gap-3">
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-app bg-plum/10 text-plum">
+        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-app bg-gradient-to-br from-pulse/15 to-plum/15 text-plum">
           <Icon size={20} />
         </span>
         <div className="min-w-0">
-          <h2 className="font-semibold">{label}</h2>
+          <h2 className="font-bold">{label}</h2>
           <p className="mt-1 text-sm text-muted">{description}</p>
         </div>
       </div>

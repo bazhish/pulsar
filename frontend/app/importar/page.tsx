@@ -81,9 +81,9 @@ export default function ImportarPage() {
           <p className="text-sm text-muted">Traga movimentacoes em CSV, revise e so depois salve.</p>
         </header>
 
-        {message ? <p className="mb-4 rounded-app border border-line bg-white p-3 text-sm shadow-soft">{message}</p> : null}
+        {message ? <p className="app-card mb-4 p-3 text-sm">{message}</p> : null}
 
-        <form onSubmit={handleUpload} className="rounded-app border border-line bg-white p-4 shadow-soft">
+        <form onSubmit={handleUpload} className="app-card p-4">
           <SectionIntro
             title="Enviar arquivo"
             description="Escolha um CSV do seu banco ou planilha. O app mostra uma previa antes de gravar qualquer movimentacao."
@@ -97,7 +97,7 @@ export default function ImportarPage() {
         </form>
 
         {upload ? (
-          <section className="mt-4 rounded-app border border-line bg-white p-4 shadow-soft">
+          <section className="app-card mt-4 p-4">
             <SectionIntro
               title="Mapeamento"
               description="Diga qual coluna do CSV corresponde a cada informacao financeira."
@@ -122,7 +122,7 @@ export default function ImportarPage() {
         ) : null}
 
         {preview ? (
-          <section className="mt-4 rounded-app border border-line bg-white p-4 shadow-soft">
+          <section className="app-card mt-4 p-4">
             <div className="flex flex-wrap justify-between gap-2">
               <h2 className="font-semibold">Previa</h2>
               <span className="text-sm text-muted">{preview.validRows} validas / {preview.invalidRows} erros</span>
@@ -152,7 +152,7 @@ export default function ImportarPage() {
           </div>
         ) : null}
 
-        <form onSubmit={createRule} className="mt-4 rounded-app border border-line bg-white p-4 shadow-soft">
+        <form onSubmit={createRule} className="app-card mt-4 p-4">
           <SectionIntro
             title="Regra de categorizacao"
             description="Crie atalhos para o app classificar importacoes futuras automaticamente."

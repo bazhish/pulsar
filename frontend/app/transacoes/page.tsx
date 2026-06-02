@@ -158,7 +158,7 @@ export default function TransacoesPage() {
           description="Use Nova despesa para gastos e Nova entrada para salario, freelas ou outras receitas. A lista abaixo pode mostrar tudo junto ou separado."
         />
 
-        {message ? <p className="mb-4 rounded-app border border-line bg-white p-3 text-sm text-ink shadow-soft">{message}</p> : null}
+        {message ? <p className="app-card mb-4 p-3 text-sm text-ink">{message}</p> : null}
 
         <section className="mb-4 grid gap-3 sm:grid-cols-2">
           <button className="focus-ring rounded-app border border-coral/25 bg-coral/10 p-4 text-left shadow-soft" type="button" onClick={() => startNew("expense")}>
@@ -173,7 +173,7 @@ export default function TransacoesPage() {
           </button>
         </section>
 
-        <form onSubmit={handleSubmit} className="rounded-app border border-line bg-white p-4 shadow-soft">
+        <form onSubmit={handleSubmit} className="app-card p-4">
           <SectionIntro
             title={form.type === "income" ? "Cadastrar entrada" : "Cadastrar despesa"}
             description={form.type === "income" ? "Registre dinheiro que entrou no mes." : "Registre gastos com descricao, valor, categoria e forma de pagamento."}
@@ -197,7 +197,7 @@ export default function TransacoesPage() {
             helpText="Use as abas para separar despesas, entradas ou conferir tudo junto."
           />
           <MovementTabs value={typeFilter} onChange={setTypeFilter} totals={totals} />
-          <div className="mt-3 rounded-app border border-line bg-white p-4 shadow-soft">
+          <div className="app-card mt-3 p-4">
             <div className="grid gap-3 md:grid-cols-[1fr_180px_auto]">
               <label className="text-sm">
                 Buscar

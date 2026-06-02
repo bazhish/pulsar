@@ -78,12 +78,12 @@ export default function OrcamentoPage() {
           description="Defina quanto pretende gastar em alimentacao, transporte, lazer e outras areas. O app mostra quando voce esta tranquilo, em atencao ou estourado."
         />
 
-        {message ? <p className="mb-4 rounded-app border border-line bg-white p-3 text-sm text-ink shadow-soft">{message}</p> : null}
+        {message ? <p className="app-card mb-4 p-3 text-sm text-ink">{message}</p> : null}
 
-        <section className="mb-4 rounded-app border border-sky/20 bg-sky/5 p-4 shadow-soft">
+        <section className="mb-4 rounded-app border border-pulse/20 bg-gradient-to-r from-mint to-white p-4 shadow-soft">
           <h2 className="font-semibold">Use o orcamento para definir limites por categoria.</h2>
           <p className="mt-1 text-sm text-muted">Assim voce sabe quando esta perto de gastar demais.</p>
-          <div className="mt-3 rounded-app border border-line bg-white p-3 text-sm">
+          <div className="mt-3 rounded-app border border-white/80 bg-white/80 p-3 text-sm shadow-sm">
             <strong>Exemplo:</strong> se Alimentacao = R$ 600 e voce ja gastou R$ 450, o sistema mostra 75% usado.
           </div>
         </section>
@@ -94,7 +94,7 @@ export default function OrcamentoPage() {
           <KpiCard label="Restante" value={formatBRL(budget?.remaining || 0)} tone={(budget?.remaining || 0) < 0 ? "danger" : "good"} />
         </div>
 
-        <form onSubmit={handleSubmit} className="mt-4 rounded-app border border-line bg-white p-4 shadow-soft">
+        <form onSubmit={handleSubmit} className="app-card mt-4 p-4">
           <SectionIntro
             title="Criar ou editar limite"
             description="Escolha uma categoria e diga o valor planejado para este mes."
@@ -138,7 +138,7 @@ export default function OrcamentoPage() {
           )}
         </section>
 
-        <section className="mt-4 rounded-app border border-line bg-white p-4 shadow-soft">
+        <section className="app-card mt-4 p-4">
           <SectionIntro
             title="Categorias sem orcamento"
             description="Essas categorias tiveram gasto no mes, mas ainda nao tem limite definido."

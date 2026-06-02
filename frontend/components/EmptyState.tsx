@@ -27,11 +27,11 @@ export function EmptyState({ title, description, actionLabel, href, onAction, ic
   ) : null;
 
   return (
-    <div className="rounded-app border border-dashed border-line bg-white p-5 text-center shadow-soft">
-      <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-app bg-pulse/10 text-pulse">
+    <div className="rounded-app border border-dashed border-pulse/30 bg-gradient-to-br from-white to-mint/70 p-5 text-center shadow-soft">
+      <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-app bg-white text-pulse shadow-soft">
         <Icon size={22} />
       </div>
-      <h3 className="mt-3 text-base font-semibold">{title}</h3>
+      <h3 className="mt-3 text-base font-bold">{title}</h3>
       <p className="mx-auto mt-1 max-w-md text-sm text-muted">{description}</p>
       {action}
     </div>

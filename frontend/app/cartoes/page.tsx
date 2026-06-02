@@ -104,7 +104,7 @@ export default function CartoesPage() {
           description="O Ritmo nao processa pagamentos. Ele usa apenas dados basicos para mostrar fatura, limite disponivel e impacto de parcelas."
         />
 
-        {message ? <p className="mb-4 rounded-app border border-line bg-white p-3 text-sm shadow-soft">{message}</p> : null}
+        {message ? <p className="app-card mb-4 p-3 text-sm">{message}</p> : null}
 
         <CreditCardEducationCard />
 
@@ -130,7 +130,7 @@ export default function CartoesPage() {
         </section>
 
         <section className="mt-4 grid gap-4 xl:grid-cols-2">
-          <form onSubmit={createCard} className="rounded-app border border-line bg-white p-4 shadow-soft">
+          <form onSubmit={createCard} className="app-card p-4">
             <SectionIntro
               title="Cadastrar cartao"
               description="Use dados de identificacao e calendario da fatura."
@@ -148,7 +148,7 @@ export default function CartoesPage() {
             <button className="btn-primary mt-4" type="submit"><Plus size={16} />Salvar cartao</button>
           </form>
 
-          <form onSubmit={simulate} className="rounded-app border border-line bg-white p-4 shadow-soft">
+          <form onSubmit={simulate} className="app-card p-4">
             <SectionIntro
               title="Simular compra"
               description="Veja como uma compra parcelada impactaria suas proximas faturas antes de comprar."
@@ -167,7 +167,7 @@ export default function CartoesPage() {
           </form>
         </section>
 
-        <form onSubmit={createInstallmentPurchase} className="mt-4 rounded-app border border-line bg-white p-4 shadow-soft">
+        <form onSubmit={createInstallmentPurchase} className="app-card mt-4 p-4">
           <SectionIntro
             title="Adicionar compra parcelada"
             description="Salve uma compra real para ela aparecer nas faturas futuras do cartao."
@@ -191,7 +191,7 @@ export default function CartoesPage() {
         </form>
 
         {projection.length ? (
-          <section className="mt-4 rounded-app border border-line bg-white p-4 shadow-soft">
+          <section className="app-card mt-4 p-4">
             <SectionIntro
               title="Impacto futuro"
               description="Veja como essa compra aparece nas proximas faturas."

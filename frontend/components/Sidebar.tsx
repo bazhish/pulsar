@@ -17,12 +17,12 @@ const links = [
 
 export function Sidebar() {
   return (
-    <aside className="hidden border-r border-line bg-white px-4 py-5 lg:block">
-      <Link href="/dashboard" className="mb-8 flex items-center gap-3">
+    <aside className="hidden border-r border-white/70 bg-white/85 px-4 py-5 shadow-soft backdrop-blur lg:block">
+      <Link href="/dashboard" className="mb-8 flex items-center gap-3 rounded-app bg-gradient-to-br from-mint to-white p-3">
         <Image src="/logo-mark.svg" width={42} height={42} alt="Ritmo Financeiro Pro" />
         <span>
-          <strong className="block leading-tight">Ritmo Financeiro</strong>
-          <small className="text-muted">Organizacao simples</small>
+          <strong className="block leading-tight text-ink">Ritmo Financeiro</strong>
+          <small className="text-muted">Seu dinheiro no ritmo</small>
         </span>
       </Link>
       <nav className="space-y-1" aria-label="Principal">
@@ -32,9 +32,11 @@ export function Sidebar() {
             <Link
               key={item.href}
               href={item.href}
-              className="flex items-center gap-3 rounded-app px-3 py-2 text-sm font-medium text-ink/75 hover:bg-ink/5"
+              className="group flex items-center gap-3 rounded-app px-3 py-3 text-sm font-bold text-ink/70 transition hover:bg-pulse/10 hover:text-ink"
             >
-              <Icon size={18} />
+              <span className="flex h-9 w-9 items-center justify-center rounded-app bg-ink/5 text-ink/70 transition group-hover:bg-pulse group-hover:text-white">
+                <Icon size={18} />
+              </span>
               {item.label}
             </Link>
           );

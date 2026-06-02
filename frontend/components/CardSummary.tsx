@@ -7,40 +7,41 @@ export function CardSummary({ card }: { card: Card }) {
   const committed = card.committedLimit ?? card.committed_limit ?? 0;
 
   return (
-    <section className="rounded-app border border-line bg-white p-4 shadow-soft">
+    <section className="app-card overflow-hidden p-4">
+      <div className="mb-4 h-2 rounded-full" style={{ backgroundColor: card.color || "#14B8A6" }} />
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h3 className="font-semibold">{card.name}</h3>
+          <h3 className="font-bold">{card.name}</h3>
           <p className="text-sm text-muted">
             {card.brand} / final {card.last_four}
           </p>
         </div>
-        <span className="rounded-app bg-ink/5 px-2 py-1 text-xs font-semibold">{card.remainingInstallments || 0} parcelas</span>
+        <span className="rounded-app bg-plum/10 px-2 py-1 text-xs font-bold text-plum">{card.remainingInstallments || 0} parcelas</span>
       </div>
       <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
         <span>
           Fatura atual
           <br />
-          <strong>{formatBRL(card.invoice || 0)}</strong>
+          <strong className="metric-number">{formatBRL(card.invoice || 0)}</strong>
         </span>
         <span>
           Limite disponivel
           <br />
-          <strong>{formatBRL(available)}</strong>
+          <strong className="metric-number">{formatBRL(available)}</strong>
         </span>
         <span>
           Limite usado
           <br />
-          <strong>{Math.round(used)}%</strong>
+          <strong className="metric-number">{Math.round(used)}%</strong>
         </span>
         <span>
           Vencimento
           <br />
-          <strong>Dia {card.due_day || "--"}</strong>
+          <strong className="metric-number">Dia {card.due_day || "--"}</strong>
         </span>
       </div>
       <div className="mt-4 h-2 rounded-full bg-ink/10">
-        <div className="h-2 rounded-full bg-pulse" style={{ width: `${used}%` }} />
+        <div className="h-2 rounded-full bg-gradient-to-r from-pulse to-plum" style={{ width: `${used}%` }} />
       </div>
       <p className="mt-2 text-xs text-muted">Fechamento dia {card.closing_day || "--"} / limite total {formatBRL(card.credit_limit || 0)} / comprometido {formatBRL(committed)}</p>
     </section>

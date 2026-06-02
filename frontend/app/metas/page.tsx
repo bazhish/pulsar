@@ -50,7 +50,7 @@ export default function MetasPage() {
           description="Quanto mais cheio, mais perto voce chegou da meta diaria. Verde esta dentro, amarelo pede atencao, vermelho passou da meta e cinza nao teve gasto."
         />
 
-        {message ? <p className="mb-4 rounded-app border border-line bg-white p-3 text-sm text-ink shadow-soft">{message}</p> : null}
+        {message ? <p className="app-card mb-4 p-3 text-sm text-ink">{message}</p> : null}
 
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <KpiCard label="Meta recomendada" value={formatBRL(goal?.recommendedDailyGoal || 0)} tone="good" />
@@ -59,7 +59,7 @@ export default function MetasPage() {
           <KpiCard label="Projecao de gasto" value={formatBRL(goal?.projectedClosing || 0)} tone={goal?.goalStatus === "red" ? "danger" : goal?.goalStatus === "yellow" ? "warning" : "good"} />
         </div>
 
-        <section className="mt-4 rounded-app border border-line bg-white p-4 shadow-soft">
+        <section className="app-card mt-4 p-4">
           <SectionIntro
             title="Calendario do ritmo"
             description="Cada circulo representa um dia do mes. Quanto mais cheio, mais perto voce chegou da sua meta diaria."
