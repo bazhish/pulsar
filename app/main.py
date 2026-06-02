@@ -2889,12 +2889,36 @@ def delete_transaction(transaction_id: int, current_user: dict = Depends(get_cur
 
 
 if FRONTEND_OUT_DIR.exists():
+    next_static_dir = FRONTEND_OUT_DIR / "_next"
+    if next_static_dir.exists():
+        app.mount("/_next", StaticFiles(directory=next_static_dir), name="next-static")
 
     @app.get("/")
     def frontend_index() -> FileResponse:
         return FileResponse(FRONTEND_OUT_DIR / "index.html")
 
-    app.mount("/", StaticFiles(directory=FRONTEND_OUT_DIR, html=True), name="frontend")
+    @app.get("/{frontend_path:path}")
+    def frontend_route(frontend_path: str) -> FileResponse:
+        if frontend_path.startswith("api/"):
+            raise HTTPException(status_code=404, detail="Rota nao encontrada.")
+
+        path = Path(frontend_path)
+        if path.is_absolute() or ".." in path.parts:
+            raise HTTPException(status_code=404, detail="Arquivo nao encontrado.")
+
+        direct_file = FRONTEND_OUT_DIR / path
+        if direct_file.is_file():
+            return FileResponse(direct_file)
+
+        html_file = FRONTEND_OUT_DIR / f"{frontend_path.rstrip('/')}.html"
+        if html_file.is_file():
+            return FileResponse(html_file)
+
+        nested_index = FRONTEND_OUT_DIR / path / "index.html"
+        if nested_index.is_file():
+            return FileResponse(nested_index)
+
+        return FileResponse(FRONTEND_OUT_DIR / "404.html", status_code=404)
 else:
 
     @app.get("/")
