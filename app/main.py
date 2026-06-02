@@ -155,7 +155,7 @@ def parse_allowed_origins() -> list[str]:
     if origins:
         return origins
     if is_production():
-        raise RuntimeError("ALLOWED_ORIGINS environment variable is required in production.")
+        return []
     return ["http://localhost:8000", "http://127.0.0.1:8000"]
 
 
@@ -275,6 +275,8 @@ def validate_runtime_config() -> None:
     get_jwt_secret()
     if is_production():
         origins = ALLOWED_ORIGINS
+        if not origins:
+            logger.info("ALLOWED_ORIGINS is empty in production. Cross-origin browser requests are disabled.")
         if any("localhost" in origin or "127.0.0.1" in origin for origin in origins):
             raise RuntimeError("ALLOWED_ORIGINS de produ\u00e7\u00e3o n\u00e3o deve apontar para localhost.")
         if "*" in origins:

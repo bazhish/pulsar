@@ -41,7 +41,9 @@ ALLOWED_ORIGINS=http://localhost:8000
 ENVIRONMENT=development
 ```
 
-Em producao, use uma `JWT_SECRET_KEY` forte, configure `ALLOWED_ORIGINS` com a URL HTTPS real do app e mantenha `DATABASE_URL` fora do codigo.
+Em producao, use uma `JWT_SECRET_KEY` forte e mantenha `DATABASE_URL` fora do codigo.
+Quando o frontend e a API rodam no mesmo dominio, `ALLOWED_ORIGINS` pode ficar vazio.
+Configure `ALLOWED_ORIGINS` apenas se precisar permitir chamadas de outro dominio HTTPS.
 
 ## Como rodar localmente com Docker
 
