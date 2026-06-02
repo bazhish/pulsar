@@ -1,0 +1,11 @@
+<svg width="340" height="96" viewBox="0 0 340 96" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Ritmo Financeiro Pro">
+  <rect width="96" height="96" rx="20" fill="#111827"/>
+  <path d="M24 55c8-18 16-27 28-27 11 0 19 7 20 18" stroke="#2DD4BF" stroke-width="7" stroke-linecap="round"/>
+  <path d="M21 53h12l6-12 9 27 8-22h20" stroke="#F4C430" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M30 66V31h21c8 0 13 4 13 11 0 6-4 10-10 11l12 13H54L43 54h-3v12H30Zm10-20h10c4 0 6-2 6-5s-2-5-6-5H40v10Z" fill="#F8FAFC"/>
+  <path d="M124 35h31c11 0 18 6 18 16 0 8-5 14-13 16l17 21h-15l-16-19h-9v19h-13V35Zm13 24h16c6 0 9-3 9-8s-3-8-9-8h-16v16Z" fill="#111827"/>
+  <path d="M187 35h13v53h-13V35Zm22 0h44v11h-15v42h-13V46h-16V35Zm61 0h13l22 53h-14l-4-11h-22l-4 11h-13l22-53Zm9 40-8-21-8 21h16Z" fill="#111827"/>
+  <path d="M124 20h176" stroke="#2DD4BF" stroke-width="5" stroke-linecap="round"/>
+  <path d="M124 18h25l8-10 11 24 10-17h26" stroke="#F4C430" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="124" y="92" fill="#4B5563" font-family="Inter, Arial, sans-serif" font-size="13" font-weight="700" letter-spacing="0">Financeiro Pro</text>
+</svg>

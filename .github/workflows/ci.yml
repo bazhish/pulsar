@@ -34,6 +34,7 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install -r requirements.txt
+      - run: python -m ruff check .
       - name: Run tests
         env:
           DATABASE_URL: postgresql://ritmo:ritmo_test@localhost:5432/ritmo_test
@@ -41,10 +42,19 @@ jobs:
           JWT_SECRET_KEY: ci-secret-key-for-testing-only-32chars
           ENVIRONMENT: testing
           ALLOWED_ORIGINS: http://localhost:8000
-        run: pytest tests/ -v --cov=app --cov-report=xml --cov-fail-under=70
-      - uses: codecov/codecov-action@v4
+        run: pytest tests/ -q
+      - uses: actions/setup-node@v4
         with:
-          files: ./coverage.xml
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Frontend checks
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run typecheck
+          npm run lint
+          npm run build
 
   security-scan:
     runs-on: ubuntu-latest

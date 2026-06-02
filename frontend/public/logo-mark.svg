@@ -1,0 +1,6 @@
+<svg width="96" height="96" viewBox="0 0 96 96" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Ritmo Financeiro Pro">
+  <rect width="96" height="96" rx="20" fill="#111827"/>
+  <path d="M24 55c8-18 16-27 28-27 11 0 19 7 20 18" stroke="#2DD4BF" stroke-width="7" stroke-linecap="round"/>
+  <path d="M21 53h12l6-12 9 27 8-22h20" stroke="#F4C430" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M30 66V31h21c8 0 13 4 13 11 0 6-4 10-10 11l12 13H54L43 54h-3v12H30Zm10-20h10c4 0 6-2 6-5s-2-5-6-5H40v10Z" fill="#F8FAFC"/>
+</svg>

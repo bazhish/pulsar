@@ -1,86 +1,61 @@
 # Ritmo Financeiro Pro
 
-Sistema full stack de controle financeiro pessoal com backend em FastAPI, frontend em Next.js + TypeScript e banco PostgreSQL. O projeto foi preparado para rodar localmente com Docker ou com Python direto, e pode usar PostgreSQL gerenciado no Supabase em producao.
+Assistente financeiro pessoal mobile first com backend FastAPI, frontend Next.js + TypeScript e PostgreSQL/Supabase.
+
+O produto organiza salario, entradas, saidas, cartoes, parcelas, metas diarias, orcamento mensal, reserva de emergencia, importacao CSV, relatórios e alertas.
 
 ## Stack
 
-- Backend: FastAPI + Uvicorn.
-- Banco de dados: PostgreSQL, incluindo Supabase via `DATABASE_URL`.
-- Autenticacao: JWT Bearer com senhas e PINs protegidos por bcrypt.
-- Frontend: Next.js + TypeScript + Tailwind CSS em `frontend/`.
+- Backend: FastAPI, psycopg2, JWT, bcrypt.
+- Frontend: Next.js, TypeScript, Tailwind CSS, Recharts, lucide-react.
+- Banco: PostgreSQL, compativel com Supabase via `DATABASE_URL`.
+- Qualidade: pytest, ruff, bandit, typecheck, lint e build Next.
 - Deploy: Docker, Railway ou Render.
-- Qualidade: pytest, ruff, bandit e cobertura via pytest-cov.
 
 ## Funcionalidades
 
-- Dashboard mensal com salario base, entradas, saidas e saldo.
-- Cadastro de lancamentos, categorias e formas de pagamento.
-- Cartoes de credito com limite, fatura, PIN, parcelas e simulacao futura.
-- Metas diarias por mes.
-- Ritmo Score, alertas financeiros e graficos.
-- Exportacao CSV/PDF.
-- Perfil, troca de senha e preferencia de resumo mensal.
+- Dashboard com "voce pode gastar hoje", ritmo do mes, previsao de fechamento e comparacao com mes anterior.
+- Transacoes com criar, editar, excluir, buscar e filtrar por mes, tipo, categoria, forma de pagamento, origem e cartao.
+- Metas diarias com calendario visual, media atual, permitido restante e projecao.
+- Orcamento por categoria com progresso, alertas e copia do mes anterior.
+- Reserva de emergencia mensal, meta total e saldo atual.
+- Cartoes com limite, fatura, parcelas, simulacao futura e protecao de PIN.
+- Importacao CSV com upload, mapeamento, previa, erros, duplicatas e source `csv_import`.
+- Regras de categorizacao para importacoes futuras.
+- Relatorios CSV/PDF e pagina de resumo mensal.
+- Identidade visual propria com `frontend/public/logo.svg` e `frontend/public/logo-mark.svg`.
 
 ## Estrutura
 
-- `main.py`: entrada do app para `uvicorn main:app`.
-- `app/main.py`: aplicacao FastAPI atual, incluindo rotas, regras e acesso ao banco.
-- `frontend/`: frontend Next.js + TypeScript.
-- `migrate.py`: cria/atualiza o schema PostgreSQL usado pelo app.
-- `tests/`: testes unitarios e de integracao.
-- `Dockerfile` e `docker-compose.yml`: execucao containerizada.
+- `app/main.py`: adaptador FastAPI atual, preservando rotas existentes.
+- `app/core/`: configuracao, logging, seguranca e contratos de infraestrutura.
+- `app/shared/`: utilitarios de dinheiro e datas.
+- `app/integrations/`: contratos para fontes futuras, incluindo `open_finance_future`.
+- `migrations/`: migrations versionadas idempotentes.
+- `frontend/app/`: paginas Next.js.
+- `frontend/components/`: layout e componentes reutilizaveis.
+- `docs/`: documentacao de arquitetura, produto, API, banco, testes e deploy.
 
-## Variaveis de ambiente
+## Ambiente
 
-Crie um `.env` local a partir de `.env.example`:
+Crie `.env` a partir de `.env.example`:
 
 ```bash
 DATABASE_URL=postgresql://user:password@host:5432/dbname
 JWT_SECRET_KEY=sua-chave-secreta-com-pelo-menos-32-caracteres
-ALLOWED_ORIGINS=http://localhost:8000
+ALLOWED_ORIGINS=http://localhost:3000
 ENVIRONMENT=development
 ```
 
-Em producao, use uma `JWT_SECRET_KEY` forte e mantenha `DATABASE_URL` fora do codigo.
-Quando o frontend e a API rodam no mesmo dominio, `ALLOWED_ORIGINS` pode ficar vazio.
-Configure `ALLOWED_ORIGINS` apenas se precisar permitir chamadas de outro dominio HTTPS.
-
-## Como rodar localmente com Docker
-
-```bash
-docker compose up
-```
-
-A API fica em:
-
-```bash
-http://localhost:8000
-```
-
-O `docker-compose.yml` sobe um PostgreSQL local e aponta `DATABASE_URL` para esse banco.
-
-## Como rodar localmente com Python
-
-Instale as dependencias:
+## Rodar backend
 
 ```bash
 python -m pip install -r requirements.txt
-```
-
-Configure `DATABASE_URL` para um PostgreSQL local ou Supabase. Depois rode:
-
-```bash
 python migrate.py
 python -m uvicorn main:app --reload --port 8000
 ```
 
-Abra a API:
-
-```bash
-http://127.0.0.1:8000
-```
-
-## Como rodar o frontend Next.js
+## Rodar frontend
 
 ```bash
 cd frontend
@@ -88,54 +63,44 @@ npm install
 npm run dev
 ```
 
-Configure `NEXT_PUBLIC_API_BASE_URL=http://localhost:8000` quando o backend estiver em outra origem. Sem essa variavel, o frontend usa a mesma origem da pagina, que e o modo usado no Docker/Railway.
+Use `NEXT_PUBLIC_API_BASE_URL=http://localhost:8000` quando frontend e backend estiverem em origens diferentes.
+
+## Docker
 
 ```bash
-http://localhost:3000
+docker compose build
+docker compose up
 ```
 
-No deploy Docker, o build gera `frontend/out` e o FastAPI serve o frontend exportado na rota `/`.
-
-## Como rodar testes
-
-Unitarios e smoke tests sem banco externo:
+## Testes e qualidade
 
 ```bash
+python -m ruff check .
+python -m bandit -r app
 python -m pytest -q
+
+cd frontend
+npm install
+npm run typecheck
+npm run lint
+npm run build
 ```
 
-Integracao com PostgreSQL:
+Para testes de integracao com banco:
 
 ```bash
 $env:TEST_DATABASE_URL="postgresql://ritmo:ritmo_test@localhost:5432/ritmo_test"
 python -m pytest tests/integration -q
 ```
 
-Sem `TEST_DATABASE_URL`, os testes de integracao sao pulados de proposito para nao usar banco de desenvolvimento ou producao por acidente.
+Sem `TEST_DATABASE_URL`, os testes de integracao sao pulados.
 
-Qualidade e seguranca:
+## Estado compartilhado
 
-```bash
-python -m ruff check .
-python -m bandit -r app
-```
+Logout, tentativas de PIN, sessoes de desbloqueio de cartao e sessoes de importacao CSV agora usam tabelas PostgreSQL quando o banco esta disponivel. O fallback em memoria existe apenas para testes/unitarios sem banco.
 
-Mais detalhes estao em `docs/quality.md`.
+## Limites atuais
 
-## Rotas principais da API
-
-- `GET /api/health`
-- `POST /api/auth/register`
-- `POST /api/auth/login`
-- `GET /api/bootstrap?month=2026-03`
-- `GET /api/goals?month=2026-03`
-- `POST /api/settings`
-- `POST /api/categories`
-- `POST /api/transactions`
-- `POST /api/cards`
-- `POST /api/cards/{id}/installments`
-- `DELETE /api/transactions/{id}`
-
-## Observacao operacional
-
-O container de producao roda temporariamente com apenas 1 worker. O app ainda usa estado em memoria para logout, tentativas de PIN e desbloqueio temporario de cartao; multiplos workers podem causar inconsistencia enquanto esse estado nao for movido para Redis, banco ou outro armazenamento compartilhado.
+- `open_finance_future` e apenas preparacao arquitetural; nao ha conexao bancaria real.
+- PDF usa gerador simples interno.
+- A modularizacao esta em fase de compatibilidade: novas pastas existem, mas `app/main.py` ainda preserva rotas e contratos historicos.

@@ -1,5 +1,7 @@
 export type TransactionType = "income" | "expense";
 export type DataSource = "manual" | "csv_import" | "open_finance_future";
+export type GoalStatus = "green" | "yellow" | "red";
+export type BudgetStatus = "ok" | "attention" | "over";
 
 export type User = {
   id: string;
@@ -8,6 +10,15 @@ export type User = {
   avatar_url?: string | null;
   send_monthly_summary: boolean;
   is_active: boolean;
+};
+
+export type Settings = {
+  monthly_income: number;
+  daily_goal: number;
+  reserve_amount: number;
+  reserve_goal_amount?: number;
+  reserve_current_amount?: number;
+  currency: string;
 };
 
 export type Category = {
@@ -25,11 +36,15 @@ export type Transaction = {
   type: TransactionType;
   category_id?: number | null;
   category_name?: string | null;
+  category_color?: string | null;
   payment_method: string;
   transaction_date: string;
+  notes?: string;
   card_id?: number | null;
   card_name?: string | null;
   billing_month?: string | null;
+  installment_number?: number | null;
+  total_installments?: number | null;
   source: DataSource;
 };
 
@@ -40,9 +55,15 @@ export type Card = {
   last_four: string;
   credit_limit: number;
   invoice: number;
+  color?: string;
+  closing_day?: number;
+  due_day?: number;
   availableCredit?: number;
+  available_credit?: number;
   committedLimit?: number;
+  committed_limit?: number;
   remainingInstallments?: number;
+  invoiceAlert?: boolean;
   activeInstallments?: Array<{
     title: string;
     amount: number;
@@ -54,10 +75,32 @@ export type Card = {
 export type Dashboard = {
   month: string;
   monthlyIncome: number;
+  salaryBase: number;
+  extraIncome: number;
   inflow: number;
   outflow: number;
   balance: number;
-  categoryBreakdown: Array<{ name: string; color: string; total: number }>;
+  projectedBalance: number;
+  salaryCommittedPercent: number;
+  availableToday: number;
+  rhythmStatus: GoalStatus;
+  closingProjection: number;
+  reserve: {
+    monthlyPlanned: number;
+    goalAmount: number;
+    currentAmount: number;
+  };
+  previousMonthComparison: {
+    month: string;
+    inflow: number;
+    outflow: number;
+    balance: number;
+    balanceDelta: number;
+    outflowDelta: number;
+  };
+  categoryBreakdown: Array<{ name: string | null; color: string | null; total: number }>;
+  paymentMethodBreakdown: Array<{ payment_method: string; total: number }>;
+  cardInvoices: Card[];
   monthlyTrend: Array<{ month: string; label: string; inflow: number; outflow: number; net: number }>;
   recentTransactions: Transaction[];
 };
@@ -82,18 +125,97 @@ export type Goal = {
   daysBelowGoal: number;
   projectedClosing: number;
   currentAverageSpend: number;
-  goalStatus: "green" | "yellow" | "red";
+  goalStatus: GoalStatus;
   riskAlert: string;
+  progressDay: number;
+  totalDays: number;
   days: GoalDay[];
 };
 
+export type BudgetItem = {
+  id: number;
+  categoryId: number;
+  categoryName: string;
+  categoryColor: string;
+  categoryIcon: string;
+  plannedAmount: number;
+  spent: number;
+  remaining: number;
+  progress: number;
+  status: BudgetStatus;
+};
+
+export type BudgetSummary = {
+  month: string;
+  totalPlanned: number;
+  totalSpent: number;
+  remaining: number;
+  items: BudgetItem[];
+  unbudgetedCategories: Array<{
+    categoryId: number;
+    categoryName: string;
+    categoryColor: string;
+    categoryIcon: string;
+    spent: number;
+  }>;
+};
+
+export type Alert = {
+  type: "info" | "warning" | "danger" | string;
+  category: string;
+  message: string;
+};
+
+export type Score = {
+  score: number;
+  label: string;
+  color: string;
+  breakdown: Record<string, number>;
+};
+
+export type ReportSummary = {
+  month: string;
+  dashboard: Dashboard;
+  budget: BudgetSummary;
+  cards: Card[];
+  score: Score;
+  paymentMethods: Array<{ payment_method: string; type: TransactionType; total: number }>;
+};
+
+export type CsvUpload = {
+  importToken: string;
+  filename: string;
+  columns: string[];
+  totalRows: number;
+  preview: Array<Record<string, string>>;
+};
+
+export type CsvPreview = {
+  importToken: string;
+  columns: string[];
+  totalRows: number;
+  validRows: number;
+  invalidRows: number;
+  preview: Array<{
+    line: number;
+    transactionDate: string;
+    title: string;
+    amount: number;
+    type: TransactionType;
+    duplicateHash: string;
+  }>;
+  errors: Array<{ line: number; detail: string }>;
+};
+
 export type Bootstrap = {
-  settings: Record<string, unknown>;
+  settings: Settings;
   categories: Category[];
   cards: Card[];
   transactions: Transaction[];
   dashboard: Dashboard;
-  score: { score: number; label: string; color: string };
-  alerts: Array<{ type: string; category: string; message: string }>;
+  budget: BudgetSummary;
+  score: Score;
+  previousScore?: Score;
+  alerts: Alert[];
   user: User;
 };

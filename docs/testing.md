@@ -1,22 +1,41 @@
-# Testes automatizados do backend
+# Testing
 
-Os testes de integração usam `TEST_DATABASE_URL` e nunca devem apontar para produção.
+Backend:
 
-```powershell
-$env:TEST_DATABASE_URL="postgresql://usuario:senha@localhost:5432/ritmo_test"
-$env:JWT_SECRET_KEY="test-secret-key-for-local-tests-32chars"
+```bash
+python -m ruff check .
+python -m bandit -r app
 python -m pytest -q
 ```
 
-A suíte cria usuários com domínio `@example.test` e remove esses dados antes e depois de cada teste.
-Se `TEST_DATABASE_URL` não estiver configurada, os testes de integração são pulados para evitar uso acidental do banco real.
+Frontend:
 
-Cobertura inicial:
+```bash
+cd frontend
+npm run typecheck
+npm run lint
+npm run build
+```
 
-- autenticação e login inválido
-- criação de categoria, entrada e saída
-- bootstrap mensal, metas e dashboard
-- cartões, compra parcelada e simulação
-- isolamento entre usuários
-- rota protegida sem token
-- importação CSV e deduplicação
+Integracao com PostgreSQL:
+
+```bash
+$env:TEST_DATABASE_URL="postgresql://user:password@localhost:5432/ritmo_test"
+python -m pytest tests/integration -q
+```
+
+Coberturas importantes existentes:
+
+- Money e parcelas.
+- Seguranca e senha.
+- Cartoes.
+- CSV import e deduplicacao.
+- Auth e isolamento basico por usuario.
+- Exportacao.
+
+Proximos testes recomendados:
+
+- Playwright completo.
+- Componentes React.
+- Orcamento por categoria.
+- Regras de categorizacao.

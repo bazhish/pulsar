@@ -36,6 +36,7 @@ RUN mkdir -p data && chown appuser:appuser data
 USER appuser
 ENV PATH="/opt/venv/bin:$PATH"
 ENV PORT=8000
+ENV WEB_CONCURRENCY=2
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
@@ -44,6 +45,4 @@ EXPOSE $PORT
 HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
   CMD curl -f http://localhost:${PORT}/api/health || exit 1
 
-# Keep a single worker until revoked tokens, PIN attempts and card unlock
-# sessions move from in-memory dictionaries to Redis or another shared store.
-CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port ${PORT} --workers 1"]
+CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port ${PORT} --workers ${WEB_CONCURRENCY}"]

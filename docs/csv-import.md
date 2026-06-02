@@ -1,52 +1,21 @@
-# Importação de extrato CSV
+# CSV Import
 
-A importação CSV é uma ponte manual antes de qualquer integração bancária direta.
+Fluxo:
 
-## Formato esperado
+1. Upload em `POST /api/imports/csv/upload`.
+2. API valida extensao, content-type e tamanho maximo de 1 MB.
+3. API detecta colunas e retorna previa bruta.
+4. Usuario mapeia data, descricao, valor e tipo opcional.
+5. `POST /api/imports/csv/preview` valida linhas e mostra erros.
+6. `POST /api/imports/csv/confirm` salva transacoes com `source = csv_import`.
+7. `duplicate_hash` evita duplicatas por usuario, data, descricao normalizada e valor.
 
-O arquivo deve ter:
+Sessoes:
 
-- extensão `.csv`
-- `Content-Type` CSV aceito pelo backend
-- tamanho máximo de 1 MB
-- cabeçalho com colunas para data, descrição e valor
-- coluna de tipo opcional
+- O arquivo original nao e persistido.
+- Linhas parseadas ficam temporariamente em `csv_import_sessions_state`.
+- Sessoes antigas sao removidas no cleanup.
 
-Exemplo:
+Regras:
 
-```csv
-data;descricao;valor;tipo
-2024-05-01;Salario;3000;entrada
-02/05/2024;Mercado;-125,50;saida
-```
-
-Datas aceitas:
-
-- `YYYY-MM-DD`
-- `DD/MM/YYYY`
-- `DD-MM-YYYY`
-
-Tipos aceitos:
-
-- entradas: `income`, `entrada`, `credito`, `crédito`, `credit`, `receita`
-- saídas: `expense`, `saida`, `saída`, `debito`, `débito`, `debit`, `despesa`
-
-Se a coluna de tipo não existir, valores negativos viram saída e valores positivos viram entrada.
-
-## Fluxo
-
-1. `POST /api/imports/csv/upload` recebe o arquivo, valida e retorna colunas disponíveis.
-2. `POST /api/imports/csv/preview` recebe o mapeamento e retorna linhas válidas/ inválidas.
-3. `POST /api/imports/csv/confirm` cria transações com `source = "csv_import"`.
-
-O arquivo original não é salvo. Apenas linhas parseadas ficam temporariamente em memória até a confirmação ou expiração.
-
-## Duplicidade
-
-O backend calcula `duplicate_hash` usando:
-
-```text
-user_id + data + descrição normalizada + valor
-```
-
-Quando o mesmo hash já existe para o usuário, a linha é ignorada.
+- `categorization_rules` aplica categoria e forma de pagamento quando o padrao aparece na descricao.

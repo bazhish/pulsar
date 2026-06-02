@@ -27,7 +27,7 @@ from fastapi.staticfiles import StaticFiles
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from psycopg2 import errors
-from psycopg2.extras import RealDictCursor
+from psycopg2.extras import Json, RealDictCursor
 from psycopg2.pool import ThreadedConnectionPool
 from pydantic import BaseModel, Field
 from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -48,6 +48,7 @@ CARD_UNLOCK_SECONDS = 15 * 60
 PIN_FAILURE_WINDOW_SECONDS = 5 * 60
 PIN_MAX_ATTEMPTS = 3
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+HEX_COLOR_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
 CSV_IMPORT_MAX_BYTES = 1024 * 1024
 CSV_IMPORT_PREVIEW_LIMIT = 10
 CSV_IMPORT_ALLOWED_CONTENT_TYPES = {
@@ -198,7 +199,7 @@ async def validate_content_type(request: Request, call_next):
         request.method in ("POST", "PUT", "PATCH")
         and request.url.path.startswith("/api/")
         and request.url.path != "/api/auth/login"
-        and content_type not in ("application/json", "")
+        and content_type not in ("application/json", "multipart/form-data", "application/x-www-form-urlencoded", "")
     ):
         return JSONResponse(
             {"detail": "Content-Type invalido."},
@@ -322,6 +323,27 @@ def db_cursor(commit: bool = False):
         raise
     finally:
         release_connection(conn)
+
+
+def storage_available() -> bool:
+    return db_pool is not None
+
+
+def token_hash(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def decode_token_metadata(token: str) -> tuple[str | None, datetime | None]:
+    try:
+        claims = jwt.get_unverified_claims(token)
+    except JWTError:
+        return None, None
+    user_id = str(claims.get("sub")) if claims.get("sub") else None
+    expires_at = None
+    exp = claims.get("exp")
+    if isinstance(exp, (int, float)):
+        expires_at = datetime.fromtimestamp(exp, timezone.utc)
+    return user_id, expires_at
 
 
 @app.on_event("startup")
@@ -521,6 +543,24 @@ def clean_text(value: str, field_name: str, max_length: int, required: bool = Tr
     return cleaned
 
 
+def validate_hex_color(value: str, field_name: str = "Cor") -> str:
+    cleaned = clean_text(value, field_name, 20)
+    if not HEX_COLOR_RE.match(cleaned):
+        raise HTTPException(status_code=400, detail=f"{field_name} deve usar formato hexadecimal #RRGGBB.")
+    return cleaned
+
+
+def validate_optional_url(value: str | None, field_name: str) -> str | None:
+    if value is None:
+        return None
+    cleaned = clean_text(value, field_name, 500, required=False)
+    if not cleaned:
+        return None
+    if not (cleaned.startswith("https://") or cleaned.startswith("http://")):
+        raise HTTPException(status_code=400, detail=f"{field_name} deve usar http ou https.")
+    return cleaned
+
+
 def validate_date_text(value: str, field_name: str) -> str:
     cleaned = clean_text(value, field_name, 10)
     try:
@@ -590,12 +630,47 @@ def create_access_token(user_id: str) -> str:
     return jwt.encode(payload, get_jwt_secret(), algorithm=JWT_ALGORITHM)
 
 
-def revoke_token(token: str) -> None:
+def revoke_token(token: str, user_id: str | None = None) -> None:
     revoked_tokens.add(token)
+    if not storage_available():
+        return
+    decoded_user_id, expires_at = decode_token_metadata(token)
+    try:
+        with db_cursor(commit=True) as cursor:
+            cursor.execute(
+                """
+                INSERT INTO revoked_tokens (token_hash, user_id, expires_at)
+                VALUES (%s, %s, %s)
+                ON CONFLICT (token_hash)
+                DO UPDATE SET revoked_at = NOW(), expires_at = EXCLUDED.expires_at
+                """,
+                (token_hash(token), user_id or decoded_user_id, expires_at),
+            )
+    except Exception:
+        logger.exception("Failed to persist revoked token")
 
 
 def is_token_revoked(token: str) -> bool:
-    return token in revoked_tokens
+    if token in revoked_tokens:
+        return True
+    if not storage_available():
+        return False
+    try:
+        with db_cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT 1
+                FROM revoked_tokens
+                WHERE token_hash = %s
+                  AND (expires_at IS NULL OR expires_at > NOW())
+                LIMIT 1
+                """,
+                (token_hash(token),),
+            )
+            return cursor.fetchone() is not None
+    except Exception:
+        logger.exception("Failed to read revoked token state")
+        return False
 
 
 def public_user(user: dict) -> dict:
@@ -728,30 +803,55 @@ def list_cards(user_id: str) -> list[dict]:
         return normalize_rows(cursor.fetchall())
 
 
-def list_transactions(user_id: str, month: Optional[str] = None) -> list[dict]:
-    if month:
-        query = """
-            SELECT t.*, c.name AS category_name, c.color AS category_color, cards.name AS card_name
-            FROM transactions t
-            LEFT JOIN categories c ON c.id = t.category_id AND c.user_id = t.user_id
-            LEFT JOIN cards ON cards.id = t.card_id AND cards.user_id = t.user_id
-            WHERE t.user_id = %s
-              AND COALESCE(t.billing_month, substring(t.transaction_date from 1 for 7)) = %s
-            ORDER BY t.transaction_date DESC, t.id DESC
-            LIMIT 100
-        """
-        params = (user_id, month)
-    else:
-        query = """
-            SELECT t.*, c.name AS category_name, c.color AS category_color, cards.name AS card_name
-            FROM transactions t
-            LEFT JOIN categories c ON c.id = t.category_id AND c.user_id = t.user_id
-            LEFT JOIN cards ON cards.id = t.card_id AND cards.user_id = t.user_id
-            WHERE t.user_id = %s
-            ORDER BY t.transaction_date DESC, t.id DESC
-            LIMIT 100
-        """
-        params = (user_id,)
+def list_transactions(
+    user_id: str,
+    month: Optional[str] = None,
+    transaction_type: Optional[str] = None,
+    category_id: Optional[int] = None,
+    payment_method: Optional[str] = None,
+    source: Optional[str] = None,
+    card_id: Optional[int] = None,
+    search: Optional[str] = None,
+) -> list[dict]:
+    pattern = f"%{search}%" if search else None
+    query = """
+        SELECT t.*, c.name AS category_name, c.color AS category_color, cards.name AS card_name
+        FROM transactions t
+        LEFT JOIN categories c ON c.id = t.category_id AND c.user_id = t.user_id
+        LEFT JOIN cards ON cards.id = t.card_id AND cards.user_id = t.user_id
+        WHERE t.user_id = %s
+          AND (%s IS NULL OR COALESCE(t.billing_month, substring(t.transaction_date from 1 for 7)) = %s)
+          AND (%s IS NULL OR t.type = %s)
+          AND (%s IS NULL OR t.category_id = %s)
+          AND (%s IS NULL OR t.payment_method = %s)
+          AND (%s IS NULL OR t.source = %s)
+          AND (%s IS NULL OR t.card_id = %s)
+          AND (
+            %s IS NULL
+            OR lower(t.title) LIKE lower(%s)
+            OR lower(COALESCE(t.raw_description, '')) LIKE lower(%s)
+          )
+        ORDER BY t.transaction_date DESC, t.id DESC
+        LIMIT 250
+    """
+    params = (
+        user_id,
+        month,
+        month,
+        transaction_type,
+        transaction_type,
+        category_id,
+        category_id,
+        payment_method,
+        payment_method,
+        source,
+        source,
+        card_id,
+        card_id,
+        pattern,
+        pattern,
+        pattern,
+    )
 
     with db_cursor() as cursor:
         cursor.execute(query, params)
@@ -967,21 +1067,17 @@ def simulate_card_invoices(
     with db_cursor() as cursor:
         for offset in range(months):
             month_key = add_months(start_month, offset)
-            category_filter = "AND category_id = %s" if category_id else ""
-            params: tuple[Any, ...] = (user_id, card_id, month_key)
-            if category_id:
-                params = (*params, category_id)
             cursor.execute(
-                f"""
+                """
                 SELECT COALESCE(SUM(amount), 0) AS total, COUNT(*) AS installments_count
                 FROM transactions
                 WHERE user_id = %s
                   AND card_id = %s
                   AND type = 'expense'
                   AND COALESCE(billing_month, substring(transaction_date from 1 for 7)) = %s
-                  {category_filter}
+                  AND (%s IS NULL OR category_id = %s)
                 """,
-                params,
+                (user_id, card_id, month_key, category_id, category_id),
             )
             row = require_row(normalize_row(cursor.fetchone()), "Simula\u00e7\u00e3o de fatura n\u00e3o encontrada.")
             result.append(
@@ -997,13 +1093,9 @@ def simulate_card_invoices(
 
 
 def get_card_commitment(user_id: str, card_id: int, month: str, category_id: Optional[int] = None) -> dict:
-    category_filter = "AND category_id = %s" if category_id else ""
-    params: tuple[Any, ...] = (user_id, card_id, month)
-    if category_id:
-        params = (*params, category_id)
     with db_cursor() as cursor:
         cursor.execute(
-            f"""
+            """
             SELECT COALESCE(SUM(amount), 0) AS total, COUNT(*) AS remaining_installments
             FROM transactions
             WHERE user_id = %s
@@ -1011,9 +1103,9 @@ def get_card_commitment(user_id: str, card_id: int, month: str, category_id: Opt
               AND type = 'expense'
               AND installment_group IS NOT NULL
               AND billing_month >= %s
-              {category_filter}
+              AND (%s IS NULL OR category_id = %s)
             """,
-            params,
+            (user_id, card_id, month, category_id, category_id),
         )
         row = require_row(normalize_row(cursor.fetchone()), "Comprometimento do cartão não encontrado.")
     return {
@@ -1023,13 +1115,9 @@ def get_card_commitment(user_id: str, card_id: int, month: str, category_id: Opt
 
 
 def get_grouped_installment_purchases(user_id: str, card_id: int, month: str, category_id: Optional[int] = None) -> list[dict]:
-    category_filter = "AND category_id = %s" if category_id else ""
-    params: tuple[Any, ...] = (user_id, card_id, month)
-    if category_id:
-        params = (*params, category_id)
     with db_cursor() as cursor:
         cursor.execute(
-            f"""
+            """
             SELECT
               installment_group,
               MIN(title) AS title,
@@ -1045,11 +1133,11 @@ def get_grouped_installment_purchases(user_id: str, card_id: int, month: str, ca
               AND type = 'expense'
               AND installment_group IS NOT NULL
               AND billing_month >= %s
-              {category_filter}
+              AND (%s IS NULL OR category_id = %s)
             GROUP BY installment_group
             ORDER BY first_open_month ASC, title ASC
             """,
-            params,
+            (user_id, card_id, month, category_id, category_id),
         )
         rows = normalize_rows(cursor.fetchall())
 
@@ -1138,6 +1226,34 @@ def card_pin_failure_key(user_id: str, card_id: int) -> str:
 def enforce_card_pin_rate_limit(user_id: str, card_id: int) -> None:
     key = card_pin_failure_key(user_id, card_id)
     now = datetime.now(timezone.utc).timestamp()
+    if storage_available():
+        with db_cursor(commit=True) as cursor:
+            cursor.execute(
+                """
+                SELECT attempts, first_attempt_at, blocked_until
+                FROM card_pin_failures_state
+                WHERE user_id = %s AND card_id = %s
+                """,
+                (user_id, card_id),
+            )
+            row = normalize_row(cursor.fetchone())
+            if not row:
+                return
+
+            blocked_until = row.get("blocked_until")
+            if isinstance(blocked_until, datetime) and blocked_until > datetime.now(timezone.utc):
+                raise HTTPException(status_code=429, detail="Muitas tentativas. Tente novamente em 5 minutos.")
+
+            first_attempt = row.get("first_attempt_at")
+            if isinstance(first_attempt, datetime) and (
+                datetime.now(timezone.utc) - first_attempt
+            ).total_seconds() > PIN_FAILURE_WINDOW_SECONDS:
+                cursor.execute(
+                    "DELETE FROM card_pin_failures_state WHERE user_id = %s AND card_id = %s",
+                    (user_id, card_id),
+                )
+        return
+
     entry = card_pin_failures.get(key)
     if not entry:
         return
@@ -1154,6 +1270,48 @@ def enforce_card_pin_rate_limit(user_id: str, card_id: int) -> None:
 def record_card_pin_failure(user_id: str, card_id: int) -> int:
     key = card_pin_failure_key(user_id, card_id)
     now = datetime.now(timezone.utc).timestamp()
+    if storage_available():
+        now_dt = datetime.now(timezone.utc)
+        blocked_until_dt = None
+        with db_cursor(commit=True) as cursor:
+            cursor.execute(
+                """
+                SELECT attempts, first_attempt_at
+                FROM card_pin_failures_state
+                WHERE user_id = %s AND card_id = %s
+                """,
+                (user_id, card_id),
+            )
+            row = normalize_row(cursor.fetchone())
+            if not row or (
+                isinstance(row.get("first_attempt_at"), datetime)
+                and (now_dt - row["first_attempt_at"]).total_seconds() > PIN_FAILURE_WINDOW_SECONDS
+            ):
+                attempts = 1
+                first_attempt_at = now_dt
+            else:
+                attempts = int(row["attempts"]) + 1
+                first_attempt_at = row["first_attempt_at"]
+
+            attempts_remaining = max(PIN_MAX_ATTEMPTS - attempts, 0)
+            if attempts >= PIN_MAX_ATTEMPTS:
+                blocked_until_dt = now_dt + timedelta(seconds=PIN_FAILURE_WINDOW_SECONDS)
+
+            cursor.execute(
+                """
+                INSERT INTO card_pin_failures_state
+                  (user_id, card_id, attempts, first_attempt_at, blocked_until)
+                VALUES (%s, %s, %s, %s, %s)
+                ON CONFLICT (user_id, card_id)
+                DO UPDATE SET
+                  attempts = EXCLUDED.attempts,
+                  first_attempt_at = EXCLUDED.first_attempt_at,
+                  blocked_until = EXCLUDED.blocked_until
+                """,
+                (user_id, card_id, attempts, first_attempt_at, blocked_until_dt),
+            )
+        return attempts_remaining
+
     entry = card_pin_failures.get(key)
     if not entry or now - float(entry.get("first_attempt") or 0) > PIN_FAILURE_WINDOW_SECONDS:
         entry = {"count": 0, "first_attempt": now, "blocked_until": 0}
@@ -1168,12 +1326,24 @@ def record_card_pin_failure(user_id: str, card_id: int) -> int:
 
 def clear_card_pin_failures(user_id: str, card_id: int) -> None:
     card_pin_failures.pop(card_pin_failure_key(user_id, card_id), None)
+    if storage_available():
+        with db_cursor(commit=True) as cursor:
+            cursor.execute(
+                "DELETE FROM card_pin_failures_state WHERE user_id = %s AND card_id = %s",
+                (user_id, card_id),
+            )
 
 
 def invalidate_card_unlock_sessions(user_id: str, card_id: int) -> None:
     for token, session in list(card_unlock_sessions.items()):
         if session["user_id"] == user_id and int(session["card_id"]) == card_id:
             card_unlock_sessions.pop(token, None)
+    if storage_available():
+        with db_cursor(commit=True) as cursor:
+            cursor.execute(
+                "DELETE FROM card_unlock_sessions_state WHERE user_id = %s AND card_id = %s",
+                (user_id, card_id),
+            )
 
 
 def create_card_unlock_session(user_id: str, card_id: int) -> tuple[str, datetime]:
@@ -1184,10 +1354,40 @@ def create_card_unlock_session(user_id: str, card_id: int) -> tuple[str, datetim
         "card_id": card_id,
         "expires_at": expires_at,
     }
+    if storage_available():
+        with db_cursor(commit=True) as cursor:
+            cursor.execute(
+                """
+                INSERT INTO card_unlock_sessions_state (token_hash, user_id, card_id, expires_at)
+                VALUES (%s, %s, %s, %s)
+                """,
+                (token_hash(token), user_id, card_id, expires_at),
+            )
     return token, expires_at
 
 
 def verify_card_unlock_session(user_id: str, card_id: int, token: str) -> None:
+    if storage_available():
+        with db_cursor(commit=True) as cursor:
+            cursor.execute(
+                """
+                SELECT user_id, card_id, expires_at
+                FROM card_unlock_sessions_state
+                WHERE token_hash = %s
+                """,
+                (token_hash(token),),
+            )
+            row = normalize_row(cursor.fetchone())
+            if not row:
+                raise HTTPException(status_code=401, detail="Desbloqueio do cart\u00e3o expirado.")
+            expires_at = row["expires_at"]
+            if not isinstance(expires_at, datetime) or expires_at <= datetime.now(timezone.utc):
+                cursor.execute("DELETE FROM card_unlock_sessions_state WHERE token_hash = %s", (token_hash(token),))
+                raise HTTPException(status_code=401, detail="Desbloqueio do cart\u00e3o expirado.")
+            if str(row["user_id"]) != user_id or int(row["card_id"]) != card_id:
+                raise HTTPException(status_code=401, detail="Desbloqueio do cart\u00e3o inv\u00e1lido.")
+        return
+
     session = card_unlock_sessions.get(token)
     if not session:
         raise HTTPException(status_code=401, detail="Desbloqueio do cart\u00e3o expirado.")
@@ -1275,16 +1475,79 @@ def get_dashboard(user_id: str, month: str) -> dict:
         )
         recent_transactions = normalize_rows(cursor.fetchall())
 
+        cursor.execute(
+            """
+            SELECT payment_method, COALESCE(SUM(amount), 0) AS total
+            FROM transactions
+            WHERE user_id = %s
+              AND type = 'expense'
+              AND COALESCE(billing_month, substring(transaction_date from 1 for 7)) = %s
+            GROUP BY payment_method
+            ORDER BY total DESC
+            """,
+            (user_id, month),
+        )
+        payment_method_breakdown = normalize_rows(cursor.fetchall())
+
+        previous_month = add_months(month, -1)
+        cursor.execute(
+            """
+            SELECT
+              COALESCE(SUM(CASE WHEN type = 'income' THEN amount END), 0) AS inflow,
+              COALESCE(SUM(CASE WHEN type = 'expense' THEN amount END), 0) AS outflow
+            FROM transactions
+            WHERE user_id = %s
+              AND COALESCE(billing_month, substring(transaction_date from 1 for 7)) = %s
+            """,
+            (user_id, previous_month),
+        )
+        previous_totals = require_row(normalize_row(cursor.fetchone()), "Totais do m\u00eas anterior n\u00e3o encontrados.")
+
     inflow = round_money(totals["inflow"])
     outflow = round_money(totals["outflow"])
+    base_income = round_money(settings["monthly_income"] or 0)
+    reserve_amount = round_money(settings.get("reserve_amount") or 0)
+    balance = round_money(base_income + inflow - outflow)
+    goals = get_goals(user_id, month)
+    previous_inflow = round_money(previous_totals["inflow"])
+    previous_outflow = round_money(previous_totals["outflow"])
+    previous_balance = round_money(base_income + previous_inflow - previous_outflow)
+    salary_base = base_income + inflow
+    committed_percent = (
+        int(((outflow + reserve_amount) / salary_base * Decimal("100")).to_integral_value(rounding=ROUND_HALF_UP))
+        if salary_base > 0
+        else 0
+    )
 
     return {
         "month": month,
-        "monthlyIncome": settings["monthly_income"],
+        "monthlyIncome": base_income,
+        "salaryBase": base_income,
+        "extraIncome": inflow,
         "inflow": inflow,
         "outflow": outflow,
-        "balance": round_money(settings["monthly_income"] + inflow - outflow),
+        "balance": balance,
+        "projectedBalance": balance,
+        "salaryCommittedPercent": committed_percent,
+        "availableToday": round_money(goals["allowedRemaining"] / Decimal(max(goals["totalDays"] - goals["progressDay"] + 1, 1))),
+        "rhythmStatus": goals["goalStatus"],
+        "closingProjection": goals["projectedClosing"],
+        "reserve": {
+            "monthlyPlanned": reserve_amount,
+            "goalAmount": round_money(settings.get("reserve_goal_amount") or 0),
+            "currentAmount": round_money(settings.get("reserve_current_amount") or 0),
+        },
+        "previousMonthComparison": {
+            "month": previous_month,
+            "inflow": previous_inflow,
+            "outflow": previous_outflow,
+            "balance": previous_balance,
+            "balanceDelta": round_money(balance - previous_balance),
+            "outflowDelta": round_money(outflow - previous_outflow),
+        },
         "categoryBreakdown": category_breakdown,
+        "paymentMethodBreakdown": payment_method_breakdown,
+        "cardInvoices": get_cards_summary(user_id, month),
         "monthlyTrend": monthly_trend,
         "recentTransactions": recent_transactions,
     }
@@ -1417,6 +1680,155 @@ def get_goals(user_id: str, month: str) -> dict:
     }
 
 
+def get_budget_summary(user_id: str, month: str) -> dict:
+    month_key = validate_month_text(month) or get_current_month()
+    with db_cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT
+              b.id,
+              b.category_id,
+              c.name AS category_name,
+              c.color AS category_color,
+              c.icon AS category_icon,
+              b.planned_amount,
+              COALESCE(SUM(t.amount), 0) AS spent
+            FROM budgets b
+            JOIN categories c ON c.id = b.category_id AND c.user_id = b.user_id
+            LEFT JOIN transactions t
+              ON t.user_id = b.user_id
+             AND t.category_id = b.category_id
+             AND t.type = 'expense'
+             AND COALESCE(t.billing_month, substring(t.transaction_date from 1 for 7)) = b.month
+            WHERE b.user_id = %s AND b.month = %s
+            GROUP BY b.id, b.category_id, c.name, c.color, c.icon, b.planned_amount
+            ORDER BY c.name ASC
+            """,
+            (user_id, month_key),
+        )
+        rows = normalize_rows(cursor.fetchall())
+
+        cursor.execute(
+            """
+            SELECT c.id, c.name, c.color, c.icon, COALESCE(SUM(t.amount), 0) AS spent
+            FROM categories c
+            LEFT JOIN transactions t
+              ON t.user_id = c.user_id
+             AND t.category_id = c.id
+             AND t.type = 'expense'
+             AND COALESCE(t.billing_month, substring(t.transaction_date from 1 for 7)) = %s
+            WHERE c.user_id = %s
+              AND c.type = 'expense'
+              AND NOT EXISTS (
+                SELECT 1
+                FROM budgets b
+                WHERE b.user_id = c.user_id AND b.category_id = c.id AND b.month = %s
+              )
+            GROUP BY c.id, c.name, c.color, c.icon
+            ORDER BY spent DESC, c.name ASC
+            """,
+            (month_key, user_id, month_key),
+        )
+        unbudgeted = normalize_rows(cursor.fetchall())
+
+    items: list[dict] = []
+    total_planned = Decimal("0")
+    total_spent = Decimal("0")
+    for row in rows:
+        planned = round_money(row["planned_amount"])
+        spent = round_money(row["spent"])
+        total_planned += planned
+        total_spent += spent
+        progress = float(min(Decimal("100"), (spent / planned) * Decimal("100"))) if planned > 0 else 0.0
+        if planned > 0 and spent > planned:
+            status_name = "over"
+        elif planned > 0 and spent >= planned * Decimal("0.85"):
+            status_name = "attention"
+        else:
+            status_name = "ok"
+        items.append(
+            {
+                "id": row["id"],
+                "categoryId": row["category_id"],
+                "categoryName": row["category_name"],
+                "categoryColor": row["category_color"],
+                "categoryIcon": row["category_icon"],
+                "plannedAmount": planned,
+                "spent": spent,
+                "remaining": round_money(planned - spent),
+                "progress": progress,
+                "status": status_name,
+            }
+        )
+
+    return {
+        "month": month_key,
+        "totalPlanned": round_money(total_planned),
+        "totalSpent": round_money(total_spent),
+        "remaining": round_money(total_planned - total_spent),
+        "items": items,
+        "unbudgetedCategories": [
+            {
+                "categoryId": row["id"],
+                "categoryName": row["name"],
+                "categoryColor": row["color"],
+                "categoryIcon": row["icon"],
+                "spent": round_money(row["spent"]),
+            }
+            for row in unbudgeted
+        ],
+    }
+
+
+def match_categorization_rule(user_id: str, description: str) -> dict | None:
+    normalized_description = normalize_duplicate_text(description)
+    with db_cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT r.id, r.category_id, r.payment_method, r.pattern, c.name AS category_name
+            FROM categorization_rules r
+            JOIN categories c ON c.id = r.category_id AND c.user_id = r.user_id
+            WHERE r.user_id = %s
+            ORDER BY length(r.pattern) DESC, r.created_at ASC
+            """,
+            (user_id,),
+        )
+        rules = normalize_rows(cursor.fetchall())
+    for rule in rules:
+        if normalize_duplicate_text(rule["pattern"]) in normalized_description:
+            return rule
+    return None
+
+
+def get_reports_summary(user_id: str, month: str) -> dict:
+    month_key = validate_month_text(month) or get_current_month()
+    dashboard = get_dashboard(user_id, month_key)
+    budget = get_budget_summary(user_id, month_key)
+    cards = get_cards_summary(user_id, month_key)
+    score_data = calculate_score(user_id, month_key)
+    with db_cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT payment_method, type, COALESCE(SUM(amount), 0) AS total
+            FROM transactions
+            WHERE user_id = %s
+              AND COALESCE(billing_month, substring(transaction_date from 1 for 7)) = %s
+            GROUP BY payment_method, type
+            ORDER BY total DESC
+            """,
+            (user_id, month_key),
+        )
+        payment_methods = normalize_rows(cursor.fetchall())
+    return {
+        "month": month_key,
+        "dashboard": dashboard,
+        "budget": budget,
+        "cards": cards,
+        "score": score_data,
+        "paymentMethods": payment_methods,
+    }
+
+
 def format_brl(value: Any) -> str:
     formatted = f"{round_money(value):,.2f}"
     return "R$ " + formatted.replace(",", "X").replace(".", ",").replace("X", ".")
@@ -1458,7 +1870,7 @@ def calculate_score(user_id: str, month: str) -> dict:
     inflow = totals["inflow"]
     outflow = totals["outflow"]
     base = 1000
-    breakdown = {"gastos": 0, "consistencia": 0, "reservas": 0, "cartoes": 0}
+    breakdown = {"gastos": 0, "consistencia": 0, "reservas": 0, "cartoes": 0, "orcamento": 0}
 
     denominator = monthly_income + inflow
     ratio_gastos = (outflow / denominator) if denominator > 0 else (Decimal("1") if outflow > 0 else Decimal("0"))
@@ -1515,6 +1927,14 @@ def calculate_score(user_id: str, month: str) -> dict:
             breakdown["cartoes"] -= 80
         elif uso_pct > Decimal("0.7"):
             breakdown["cartoes"] -= 40
+
+    budget = get_budget_summary(user_id, month)
+    over_budget = len([item for item in budget["items"] if item["status"] == "over"])
+    attention_budget = len([item for item in budget["items"] if item["status"] == "attention"])
+    if over_budget:
+        breakdown["orcamento"] -= min(120, over_budget * 40)
+    elif budget["items"] and not attention_budget:
+        breakdown["orcamento"] += 50
 
     base += sum(breakdown.values())
     score = max(0, min(1000, int(base)))
@@ -1649,6 +2069,25 @@ def get_alerts_for_month(user_id: str, month: str) -> list[dict]:
             }
         )
 
+    budget = get_budget_summary(user_id, month)
+    for item in budget["items"]:
+        if item["status"] == "over":
+            alerts.append(
+                {
+                    "type": "danger",
+                    "category": "orcamento",
+                    "message": f"{item['categoryName']} passou do orcamento em {format_brl(abs(item['remaining']))}",
+                }
+            )
+        elif item["status"] == "attention":
+            alerts.append(
+                {
+                    "type": "warning",
+                    "category": "orcamento",
+                    "message": f"{item['categoryName']} esta perto do limite planejado.",
+                }
+            )
+
     return alerts
 
 
@@ -1772,6 +2211,8 @@ class SettingsPayload(BaseModel):
     monthlyIncome: Optional[Decimal] = Field(default=None, ge=0, le=999999999)
     dailyGoal: Optional[Decimal] = Field(default=None, gt=0, le=999999999)
     reserveAmount: Optional[Decimal] = Field(default=None, ge=0, le=999999999)
+    reserveGoalAmount: Optional[Decimal] = Field(default=None, ge=0, le=999999999)
+    reserveCurrentAmount: Optional[Decimal] = Field(default=None, ge=0, le=999999999)
 
     class Config:
         extra = "forbid"
@@ -1895,6 +2336,60 @@ class RecurringPayload(BaseModel):
         extra = "forbid"
 
 
+class TransactionUpdatePayload(BaseModel):
+    title: Optional[str] = Field(default=None, min_length=1, max_length=200)
+    amount: Optional[Decimal] = Field(default=None, gt=0, le=999999999)
+    type: Optional[Literal["income", "expense"]] = None
+    categoryId: Optional[int] = Field(default=None, ge=1)
+    paymentMethod: Optional[str] = Field(default=None, min_length=1, max_length=50)
+    transactionDate: Optional[str] = Field(default=None, min_length=10, max_length=10)
+    notes: Optional[str] = Field(default=None, max_length=1000)
+    cardId: Optional[int] = Field(default=None, ge=1)
+    billingMonth: Optional[str] = Field(default=None, min_length=7, max_length=7)
+
+    class Config:
+        extra = "forbid"
+
+
+class BudgetPayload(BaseModel):
+    categoryId: int = Field(..., ge=1)
+    month: str = Field(..., min_length=7, max_length=7)
+    plannedAmount: Decimal = Field(..., ge=0, le=999999999)
+
+    class Config:
+        extra = "forbid"
+
+
+class BudgetCopyPayload(BaseModel):
+    fromMonth: str = Field(..., min_length=7, max_length=7)
+    toMonth: str = Field(..., min_length=7, max_length=7)
+
+    class Config:
+        extra = "forbid"
+
+
+class CategorizationRulePayload(BaseModel):
+    pattern: str = Field(..., min_length=2, max_length=120)
+    categoryId: int = Field(..., ge=1)
+    paymentMethod: Optional[str] = Field(default=None, min_length=1, max_length=50)
+
+    class Config:
+        extra = "forbid"
+
+
+class CardUpdatePayload(BaseModel):
+    name: Optional[str] = Field(default=None, min_length=1, max_length=100)
+    brand: Optional[str] = Field(default=None, min_length=1, max_length=40)
+    lastFour: Optional[str] = Field(default=None, min_length=4, max_length=4)
+    creditLimit: Optional[Decimal] = Field(default=None, ge=0, le=999999999)
+    closingDay: Optional[int] = Field(default=None, ge=1, le=31)
+    dueDay: Optional[int] = Field(default=None, ge=1, le=31)
+    color: Optional[str] = Field(default=None, min_length=1, max_length=20)
+
+    class Config:
+        extra = "forbid"
+
+
 def validate_csv_mapping(columns: list[str], mapping: CsvColumnMapping) -> None:
     required = [mapping.date, mapping.description, mapping.value]
     if mapping.type:
@@ -1905,6 +2400,31 @@ def validate_csv_mapping(columns: list[str], mapping: CsvColumnMapping) -> None:
 
 
 def get_csv_import_session(user_id: str, token: str) -> dict:
+    if storage_available():
+        with db_cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT filename, columns_json, rows_json, created_at
+                FROM csv_import_sessions_state
+                WHERE token_hash = %s AND user_id = %s
+                """,
+                (token_hash(token), user_id),
+            )
+            row = normalize_row(cursor.fetchone())
+        if row:
+            columns_json = row["columns_json"]
+            rows_json = row["rows_json"]
+            columns = json.loads(columns_json) if isinstance(columns_json, str) else columns_json
+            rows = json.loads(rows_json) if isinstance(rows_json, str) else rows_json
+            return {
+                "token": token,
+                "user_id": user_id,
+                "filename": row["filename"],
+                "columns": columns,
+                "rows": rows,
+                "created_at": row["created_at"],
+            }
+
     session = csv_import_sessions.get(token)
     if not session or session["user_id"] != user_id:
         raise HTTPException(status_code=404, detail="Importação não encontrada ou expirada.")
@@ -1913,6 +2433,9 @@ def get_csv_import_session(user_id: str, token: str) -> dict:
 
 def cleanup_csv_import_sessions() -> None:
     cutoff = datetime.now(timezone.utc) - timedelta(minutes=30)
+    if storage_available():
+        with db_cursor(commit=True) as cursor:
+            cursor.execute("DELETE FROM csv_import_sessions_state WHERE created_at < %s", (cutoff,))
     for token, session in list(csv_import_sessions.items()):
         created_at = session.get("created_at")
         if not isinstance(created_at, datetime) or created_at < cutoff:
@@ -2079,7 +2602,7 @@ def save_profile_payload(payload: ProfilePayload, current_user: dict) -> dict:
     if "avatar_url" in fields_set:
         avatar_url = None
     if "avatar_url" in fields_set and payload.avatar_url is not None:
-        avatar_url = clean_text(payload.avatar_url, "URL do avatar", 500, required=False) or None
+        avatar_url = validate_optional_url(payload.avatar_url, "URL do avatar")
 
     if "send_monthly_summary" in fields_set and payload.send_monthly_summary is not None:
         send_monthly_summary = bool(payload.send_monthly_summary)
@@ -2145,7 +2668,7 @@ def auth_stats(current_user: dict = Depends(get_current_user)) -> dict:
 
 @app.post("/api/auth/logout")
 def logout(token: str = Depends(oauth2_scheme), current_user: dict = Depends(get_current_user)) -> dict:
-    revoke_token(token)
+    revoke_token(token, current_user["id"])
     return {"message": "Sessao encerrada no servidor."}
 
 
@@ -2162,6 +2685,7 @@ def bootstrap(month: Optional[str] = None, current_user: dict = Depends(get_curr
         "cards": get_cards_summary(user_id, month_key),
         "transactions": list_transactions(user_id, month_key),
         "dashboard": get_dashboard(user_id, month_key),
+        "budget": get_budget_summary(user_id, month_key),
         "score": score,
         "previousScore": previous_score,
         "alerts": get_alerts_for_month(user_id, month_key),
@@ -2188,6 +2712,32 @@ def transaction_suggestions(month: Optional[str] = None, current_user: dict = De
     return get_recurring_suggestions(current_user["id"], month_key)
 
 
+@app.get("/api/transactions")
+def transactions(
+    month: Optional[str] = None,
+    type: Optional[Literal["income", "expense"]] = None,
+    categoryId: Optional[int] = Query(default=None, ge=1),
+    paymentMethod: Optional[str] = None,
+    source: Optional[Literal["manual", "csv_import", "open_finance_future"]] = None,
+    cardId: Optional[int] = Query(default=None, ge=1),
+    search: Optional[str] = Query(default=None, max_length=120),
+    current_user: dict = Depends(get_current_user),
+) -> list[dict]:
+    month_key = validate_month_text(month) if month else None
+    payment_method = clean_text(paymentMethod, "Forma de pagamento", 50, required=False) if paymentMethod else None
+    search_text = clean_text(search, "Busca", 120, required=False) if search else None
+    return list_transactions(
+        current_user["id"],
+        month_key,
+        type,
+        categoryId,
+        payment_method,
+        source,
+        cardId,
+        search_text,
+    )
+
+
 @app.post("/api/imports/csv/upload")
 def upload_csv_import(file: UploadFile = File(...), current_user: dict = Depends(get_current_user)) -> dict:
     cleanup_csv_import_sessions()
@@ -2212,6 +2762,16 @@ def upload_csv_import(file: UploadFile = File(...), current_user: dict = Depends
         "rows": rows,
         "created_at": datetime.now(timezone.utc),
     }
+    if storage_available():
+        with db_cursor(commit=True) as cursor:
+            cursor.execute(
+                """
+                INSERT INTO csv_import_sessions_state
+                  (token_hash, user_id, filename, columns_json, rows_json, created_at)
+                VALUES (%s, %s, %s, %s, %s, NOW())
+                """,
+                (token_hash(token), current_user["id"], filename, Json(columns), Json(rows)),
+            )
     return {
         "importToken": token,
         "filename": filename,
@@ -2252,13 +2812,16 @@ def confirm_csv_import(payload: CsvImportConfirmPayload, current_user: dict = De
                 duplicates.append(row)
                 continue
 
+            rule = match_categorization_rule(user_id, row["title"])
+            category_id = rule["category_id"] if rule else None
+            payment_method = rule.get("payment_method") if rule and rule.get("payment_method") else "csv_import"
             cursor.execute(
                 """
                 INSERT INTO transactions
                   (user_id, title, amount, type, category_id, payment_method, transaction_date, notes, card_id,
                    billing_month, installment_group, installment_number, total_installments, source, external_id,
                    imported_at, raw_description, duplicate_hash)
-                VALUES (%s, %s, %s, %s, NULL, 'csv_import', %s, '', NULL, NULL, NULL, NULL, NULL,
+                VALUES (%s, %s, %s, %s, %s, %s, %s, '', NULL, NULL, NULL, NULL, NULL,
                         'csv_import', %s, NOW(), %s, %s)
                 RETURNING *
                 """,
@@ -2267,6 +2830,8 @@ def confirm_csv_import(payload: CsvImportConfirmPayload, current_user: dict = De
                     row["title"],
                     row["amount"],
                     row["type"],
+                    category_id,
+                    payment_method,
                     row["transactionDate"],
                     row["duplicateHash"],
                     row["rawDescription"],
@@ -2276,6 +2841,12 @@ def confirm_csv_import(payload: CsvImportConfirmPayload, current_user: dict = De
             imported.append(require_row(normalize_row(cursor.fetchone()), "Lançamento importado não criado."))
 
     csv_import_sessions.pop(payload.importToken, None)
+    if storage_available():
+        with db_cursor(commit=True) as cursor:
+            cursor.execute(
+                "DELETE FROM csv_import_sessions_state WHERE token_hash = %s AND user_id = %s",
+                (token_hash(payload.importToken), user_id),
+            )
     return {
         "imported": len(imported),
         "duplicates": len(duplicates),
@@ -2288,6 +2859,105 @@ def confirm_csv_import(payload: CsvImportConfirmPayload, current_user: dict = De
 def goals(month: Optional[str] = None, current_user: dict = Depends(get_current_user)) -> dict:
     month_key = validate_month_text(month) or get_current_month()
     return get_goals(current_user["id"], month_key)
+
+
+@app.get("/api/budgets")
+def budgets(month: Optional[str] = None, current_user: dict = Depends(get_current_user)) -> dict:
+    month_key = validate_month_text(month) or get_current_month()
+    return get_budget_summary(current_user["id"], month_key)
+
+
+@app.post("/api/budgets")
+def save_budget(payload: BudgetPayload, current_user: dict = Depends(get_current_user)) -> dict:
+    user_id = current_user["id"]
+    month_key = validate_month_text(payload.month) or get_current_month()
+    try:
+        with db_cursor(commit=True) as cursor:
+            cursor.execute(
+                """
+                INSERT INTO budgets (user_id, category_id, month, planned_amount)
+                VALUES (%s, %s, %s, %s)
+                ON CONFLICT (user_id, category_id, month)
+                DO UPDATE SET planned_amount = EXCLUDED.planned_amount, updated_at = NOW()
+                RETURNING *
+                """,
+                (user_id, payload.categoryId, month_key, round_money(payload.plannedAmount)),
+            )
+            row = require_row(normalize_row(cursor.fetchone()), "Orcamento nao salvo.")
+    except errors.ForeignKeyViolation:
+        raise HTTPException(status_code=400, detail="Categoria invalida.")
+    return row
+
+
+@app.post("/api/budgets/copy")
+def copy_budget(payload: BudgetCopyPayload, current_user: dict = Depends(get_current_user)) -> dict:
+    user_id = current_user["id"]
+    from_month = validate_month_text(payload.fromMonth) or get_current_month()
+    to_month = validate_month_text(payload.toMonth) or get_current_month()
+    with db_cursor(commit=True) as cursor:
+        cursor.execute(
+            """
+            INSERT INTO budgets (user_id, category_id, month, planned_amount)
+            SELECT user_id, category_id, %s, planned_amount
+            FROM budgets
+            WHERE user_id = %s AND month = %s
+            ON CONFLICT (user_id, category_id, month)
+            DO UPDATE SET planned_amount = EXCLUDED.planned_amount, updated_at = NOW()
+            """,
+            (to_month, user_id, from_month),
+        )
+    return get_budget_summary(user_id, to_month)
+
+
+@app.get("/api/categorization-rules")
+def categorization_rules(current_user: dict = Depends(get_current_user)) -> list[dict]:
+    with db_cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT r.*, c.name AS category_name
+            FROM categorization_rules r
+            JOIN categories c ON c.id = r.category_id AND c.user_id = r.user_id
+            WHERE r.user_id = %s
+            ORDER BY r.created_at DESC
+            """,
+            (current_user["id"],),
+        )
+        return normalize_rows(cursor.fetchall())
+
+
+@app.post("/api/categorization-rules")
+def create_categorization_rule(
+    payload: CategorizationRulePayload,
+    current_user: dict = Depends(get_current_user),
+) -> dict:
+    user_id = current_user["id"]
+    pattern = normalize_duplicate_text(clean_text(payload.pattern, "Padrao", 120))
+    payment_method = (
+        clean_text(payload.paymentMethod, "Forma de pagamento", 50, required=False)
+        if payload.paymentMethod
+        else None
+    )
+    try:
+        with db_cursor(commit=True) as cursor:
+            cursor.execute(
+                """
+                INSERT INTO categorization_rules (user_id, pattern, category_id, payment_method)
+                VALUES (%s, %s, %s, %s)
+                ON CONFLICT (user_id, pattern)
+                DO UPDATE SET category_id = EXCLUDED.category_id, payment_method = EXCLUDED.payment_method
+                RETURNING *
+                """,
+                (user_id, pattern, payload.categoryId, payment_method),
+            )
+            return require_row(normalize_row(cursor.fetchone()), "Regra nao criada.")
+    except errors.ForeignKeyViolation:
+        raise HTTPException(status_code=400, detail="Categoria invalida.")
+
+
+@app.get("/api/reports")
+def reports(month: Optional[str] = None, current_user: dict = Depends(get_current_user)) -> dict:
+    month_key = validate_month_text(month) or get_current_month()
+    return get_reports_summary(current_user["id"], month_key)
 
 
 @app.get("/api/cards")
@@ -2457,16 +3127,26 @@ def save_settings(payload: SettingsPayload, current_user: dict = Depends(get_cur
     monthly_income = round_money(payload.monthlyIncome if payload.monthlyIncome is not None else current["monthly_income"])
     daily_goal = round_money(payload.dailyGoal if payload.dailyGoal is not None else current["daily_goal"])
     reserve_amount = round_money(payload.reserveAmount if payload.reserveAmount is not None else current["reserve_amount"])
+    reserve_goal_amount = round_money(
+        payload.reserveGoalAmount if payload.reserveGoalAmount is not None else current.get("reserve_goal_amount", 0)
+    )
+    reserve_current_amount = round_money(
+        payload.reserveCurrentAmount if payload.reserveCurrentAmount is not None else current.get("reserve_current_amount", 0)
+    )
 
     with db_cursor(commit=True) as cursor:
         cursor.execute(
             """
             UPDATE settings
-            SET monthly_income = %s, daily_goal = %s, reserve_amount = %s
+            SET monthly_income = %s,
+                daily_goal = %s,
+                reserve_amount = %s,
+                reserve_goal_amount = %s,
+                reserve_current_amount = %s
             WHERE user_id = %s AND id = 1
             RETURNING *
             """,
-            (monthly_income, daily_goal, reserve_amount, user_id),
+            (monthly_income, daily_goal, reserve_amount, reserve_goal_amount, reserve_current_amount, user_id),
         )
         row = normalize_row(cursor.fetchone())
     return row or get_settings(user_id)
@@ -2476,7 +3156,7 @@ def save_settings(payload: SettingsPayload, current_user: dict = Depends(get_cur
 def create_category(payload: CategoryPayload, current_user: dict = Depends(get_current_user)) -> dict:
     user_id = current_user["id"]
     name = clean_text(payload.name, "Nome da categoria", 80)
-    color = clean_text(payload.color, "Cor", 20)
+    color = validate_hex_color(payload.color)
     icon = clean_text(payload.icon, "\u00cdcone", 10)
 
     try:
@@ -2540,6 +3220,87 @@ def create_transaction(payload: TransactionPayload, current_user: dict = Depends
             row = require_row(normalize_row(cursor.fetchone()), "Lan\u00e7amento n\u00e3o criado.")
     except errors.ForeignKeyViolation:
         raise HTTPException(status_code=400, detail="Categoria ou cart\u00e3o inv\u00e1lido.")
+
+    return row
+
+
+@app.put("/api/transactions/{transaction_id}")
+def update_transaction(
+    transaction_id: int,
+    payload: TransactionUpdatePayload,
+    current_user: dict = Depends(get_current_user),
+) -> dict:
+    user_id = current_user["id"]
+    fields_set = getattr(payload, "model_fields_set", getattr(payload, "__fields_set__", set()))
+    with db_cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT *
+            FROM transactions
+            WHERE user_id = %s AND id = %s
+            """,
+            (user_id, transaction_id),
+        )
+        current = normalize_row(cursor.fetchone())
+    if not current:
+        raise HTTPException(status_code=404, detail="Lancamento nao encontrado.")
+
+    title = clean_text(payload.title, "Titulo", 200) if "title" in fields_set and payload.title else current["title"]
+    amount = round_money(payload.amount if "amount" in fields_set and payload.amount is not None else current["amount"])
+    transaction_type = payload.type if "type" in fields_set and payload.type else current["type"]
+    category_id = payload.categoryId if "categoryId" in fields_set else current["category_id"]
+    payment_method = (
+        clean_text(payload.paymentMethod, "Forma de pagamento", 50)
+        if "paymentMethod" in fields_set and payload.paymentMethod
+        else current["payment_method"]
+    )
+    transaction_date = (
+        validate_date_text(payload.transactionDate, "Data")
+        if "transactionDate" in fields_set and payload.transactionDate
+        else current["transaction_date"]
+    )
+    notes = (
+        clean_text(payload.notes or "", "Observacoes", 1000, required=False)
+        if "notes" in fields_set
+        else current.get("notes", "")
+    )
+    card_id = payload.cardId if "cardId" in fields_set else current["card_id"]
+    billing_month = validate_month_text(payload.billingMonth) if "billingMonth" in fields_set else current["billing_month"]
+
+    try:
+        with db_cursor(commit=True) as cursor:
+            cursor.execute(
+                """
+                UPDATE transactions
+                SET title = %s,
+                    amount = %s,
+                    type = %s,
+                    category_id = %s,
+                    payment_method = %s,
+                    transaction_date = %s,
+                    notes = %s,
+                    card_id = %s,
+                    billing_month = %s
+                WHERE user_id = %s AND id = %s
+                RETURNING *
+                """,
+                (
+                    title,
+                    amount,
+                    transaction_type,
+                    category_id,
+                    payment_method,
+                    transaction_date,
+                    notes,
+                    card_id,
+                    billing_month,
+                    user_id,
+                    transaction_id,
+                ),
+            )
+            row = require_row(normalize_row(cursor.fetchone()), "Lancamento nao atualizado.")
+    except errors.ForeignKeyViolation:
+        raise HTTPException(status_code=400, detail="Categoria ou cartao invalido.")
 
     return row
 
@@ -2764,7 +3525,7 @@ def create_card(payload: CardPayload, current_user: dict = Depends(get_current_u
     last_four = clean_text(payload.lastFour, "Final do cart\u00e3o", 4)
     if not last_four.isdigit():
         raise HTTPException(status_code=400, detail="Final do cart\u00e3o deve conter 4 n\u00fameros.")
-    color = clean_text(payload.color, "Cor", 20)
+    color = validate_hex_color(payload.color)
 
     with db_cursor(commit=True) as cursor:
         cursor.execute(
@@ -2777,6 +3538,74 @@ def create_card(payload: CardPayload, current_user: dict = Depends(get_current_u
         )
         row = require_row(normalize_row(cursor.fetchone()), "Cart\u00e3o n\u00e3o criado.")
     return row
+
+
+@app.put("/api/cards/{card_id}")
+def update_card(card_id: int, payload: CardUpdatePayload, current_user: dict = Depends(get_current_user)) -> dict:
+    user_id = current_user["id"]
+    current = get_card_for_user(user_id, card_id)
+    fields_set = getattr(payload, "model_fields_set", getattr(payload, "__fields_set__", set()))
+    name = clean_text(payload.name, "Nome do cartao", 100) if "name" in fields_set and payload.name else current["name"]
+    brand = clean_text(payload.brand, "Bandeira", 40) if "brand" in fields_set and payload.brand else current["brand"]
+    last_four = clean_text(payload.lastFour, "Final do cartao", 4) if "lastFour" in fields_set and payload.lastFour else current["last_four"]
+    if not str(last_four).isdigit():
+        raise HTTPException(status_code=400, detail="Final do cartao deve conter 4 numeros.")
+    credit_limit = round_money(
+        payload.creditLimit if "creditLimit" in fields_set and payload.creditLimit is not None else current["credit_limit"]
+    )
+    closing_day = payload.closingDay if "closingDay" in fields_set and payload.closingDay else current["closing_day"]
+    due_day = payload.dueDay if "dueDay" in fields_set and payload.dueDay else current["due_day"]
+    color = validate_hex_color(payload.color) if "color" in fields_set and payload.color else current["color"]
+
+    with db_cursor(commit=True) as cursor:
+        cursor.execute(
+            """
+            UPDATE cards
+            SET name = %s,
+                brand = %s,
+                last_four = %s,
+                credit_limit = %s,
+                closing_day = %s,
+                due_day = %s,
+                color = %s
+            WHERE user_id = %s AND id = %s
+            RETURNING *
+            """,
+            (name, brand, last_four, credit_limit, closing_day, due_day, color, user_id, card_id),
+        )
+        return require_row(normalize_row(cursor.fetchone()), "Cartao nao atualizado.")
+
+
+@app.delete("/api/cards/{card_id}")
+def delete_card(
+    card_id: int,
+    force: bool = False,
+    current_user: dict = Depends(get_current_user),
+) -> dict:
+    user_id = current_user["id"]
+    get_card_for_user(user_id, card_id)
+    with db_cursor(commit=True) as cursor:
+        cursor.execute(
+            "SELECT COUNT(*) AS total FROM transactions WHERE user_id = %s AND card_id = %s",
+            (user_id, card_id),
+        )
+        linked = int(require_row(normalize_row(cursor.fetchone()), "Cartao nao encontrado.")["total"])
+        if linked and not force:
+            raise HTTPException(
+                status_code=409,
+                detail="Cartao possui lancamentos vinculados. Revise antes de excluir ou use force=true.",
+            )
+        if linked and force:
+            cursor.execute(
+                "UPDATE transactions SET card_id = NULL WHERE user_id = %s AND card_id = %s",
+                (user_id, card_id),
+            )
+        cursor.execute("DELETE FROM card_pins WHERE user_id = %s AND card_id = %s", (user_id, card_id))
+        cursor.execute("DELETE FROM cards WHERE user_id = %s AND id = %s", (user_id, card_id))
+    invalidate_card_unlock_sessions(user_id, card_id)
+    clear_card_pin_failures(user_id, card_id)
+    audit_log("card_deleted", user_id, {"card_id": card_id, "linked_transactions": linked, "force": force})
+    return {"deleted": True, "unlinkedTransactions": linked if force else 0}
 
 
 @app.post("/api/cards/{card_id}/installments")

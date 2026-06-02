@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import logging
+from pathlib import Path
 
 import psycopg2
 from dotenv import load_dotenv
@@ -9,6 +10,8 @@ from dotenv import load_dotenv
 load_dotenv()
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger("ritmo_financeiro_migrate")
+BASE_DIR = Path(__file__).resolve().parent
+MIGRATIONS_DIR = BASE_DIR / "migrations"
 
 SCHEMA_SQL = """
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
@@ -134,7 +137,9 @@ ALTER TABLE transactions
   ADD COLUMN IF NOT EXISTS duplicate_hash TEXT;
 
 ALTER TABLE settings
-  ADD COLUMN IF NOT EXISTS reserve_amount NUMERIC(14, 2) NOT NULL DEFAULT 0;
+  ADD COLUMN IF NOT EXISTS reserve_amount NUMERIC(14, 2) NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS reserve_goal_amount NUMERIC(14, 2) NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS reserve_current_amount NUMERIC(14, 2) NOT NULL DEFAULT 0;
 
 ALTER TABLE transactions
   DROP CONSTRAINT IF EXISTS transactions_recurrence_type_check;
@@ -158,10 +163,36 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_transactions_user_duplicate_hash
 """
 
 
+def apply_versioned_migrations(conn) -> None:
+    with conn.cursor() as cursor:
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS schema_migrations (
+              version TEXT PRIMARY KEY,
+              applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            );
+            """
+        )
+        if not MIGRATIONS_DIR.exists():
+            conn.commit()
+            return
+
+        for path in sorted(MIGRATIONS_DIR.glob("*.sql")):
+            version = path.stem
+            cursor.execute("SELECT 1 FROM schema_migrations WHERE version = %s", (version,))
+            if cursor.fetchone():
+                continue
+            logger.info("Applying migration %s", path.name)
+            cursor.execute(path.read_text(encoding="utf-8"))
+            cursor.execute("INSERT INTO schema_migrations (version) VALUES (%s)", (version,))
+    conn.commit()
+
+
 def run_migrations(conn) -> None:
     with conn.cursor() as cursor:
         cursor.execute(SCHEMA_SQL)
     conn.commit()
+    apply_versioned_migrations(conn)
 
 
 def migrate() -> None:

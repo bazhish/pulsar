@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
@@ -22,22 +23,23 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="grid min-h-screen place-items-center px-4">
-      <form onSubmit={handleSubmit} className="w-full max-w-sm rounded border border-black/10 bg-white p-5">
-        <h1 className="text-xl font-bold">Entrar</h1>
+    <main className="grid min-h-screen place-items-center px-4 py-8">
+      <form onSubmit={handleSubmit} className="w-full max-w-sm rounded-app border border-line bg-white p-5 shadow-lift">
+        <Image src="/logo.svg" width={220} height={62} alt="Ritmo Financeiro Pro" priority />
+        <h1 className="mt-5 text-xl font-bold">Entrar</h1>
         <label className="mt-4 block text-sm">
           E-mail
-          <input className="focus-ring mt-1 w-full rounded border border-black/10 px-3 py-2" name="email" type="email" required />
+          <input className="field mt-1" name="email" type="email" required />
         </label>
         <label className="mt-3 block text-sm">
           Senha
-          <input className="focus-ring mt-1 w-full rounded border border-black/10 px-3 py-2" name="password" type="password" required />
+          <input className="field mt-1" name="password" type="password" required />
         </label>
         {error ? <p className="mt-3 text-sm text-coral">{error}</p> : null}
-        <button className="focus-ring mt-4 w-full rounded bg-ink px-4 py-2 font-semibold text-white" type="submit">
+        <button className="btn-primary mt-4 w-full" type="submit">
           Entrar
         </button>
-        <Link className="mt-3 block text-center text-sm text-sky" href="/cadastro">Criar conta</Link>
+        <Link className="mt-3 block text-center text-sm font-semibold text-sky" href="/cadastro">Criar conta</Link>
       </form>
     </main>
   );
