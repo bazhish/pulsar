@@ -1,6 +1,6 @@
 import type { Bootstrap, Card, Category, Goal, Transaction, User } from "@/types/finance";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "";
 
 type RequestOptions = RequestInit & {
   token?: string | null;

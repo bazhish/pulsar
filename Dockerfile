@@ -10,6 +10,15 @@ RUN if [ -f requirements-lock.txt ]; then \
       pip install --no-cache-dir -r requirements.txt; \
     fi
 
+FROM node:22-alpine AS frontend
+
+WORKDIR /frontend
+COPY frontend/package*.json ./
+RUN npm ci
+COPY frontend/ ./
+ENV NEXT_PUBLIC_API_BASE_URL=""
+RUN npm run build
+
 FROM python:3.12-slim AS runtime
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -21,6 +30,7 @@ RUN groupadd -r appuser && useradd -r -g appuser -d /app appuser
 WORKDIR /app
 COPY --from=deps /opt/venv /opt/venv
 COPY --chown=appuser:appuser . .
+COPY --from=frontend --chown=appuser:appuser /frontend/out ./frontend/out
 RUN mkdir -p data && chown appuser:appuser data
 
 USER appuser

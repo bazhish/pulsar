@@ -14,14 +14,16 @@ import uuid
 from contextlib import contextmanager
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, ROUND_HALF_UP
+from pathlib import Path
 from typing import Any, Literal, Optional
 from uuid import UUID
 
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Query, Request, UploadFile, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.security import OAuth2PasswordBearer
+from fastapi.staticfiles import StaticFiles
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from psycopg2 import errors
@@ -36,6 +38,9 @@ from starlette.responses import Response
 from migrate import run_migrations
 
 load_dotenv()
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+FRONTEND_OUT_DIR = BASE_DIR / "frontend" / "out"
 
 JWT_ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_HOURS = 24
@@ -2881,6 +2886,15 @@ def delete_transaction(transaction_id: int, current_user: dict = Depends(get_cur
     return {"deleted": True}
 
 
-@app.get("/")
-def api_root() -> dict:
-    return {"service": "Ritmo Financeiro Pro API", "docs": "/docs", "health": "/api/health"}
+if FRONTEND_OUT_DIR.exists():
+
+    @app.get("/")
+    def frontend_index() -> FileResponse:
+        return FileResponse(FRONTEND_OUT_DIR / "index.html")
+
+    app.mount("/", StaticFiles(directory=FRONTEND_OUT_DIR, html=True), name="frontend")
+else:
+
+    @app.get("/")
+    def api_root() -> dict:
+        return {"service": "Ritmo Financeiro Pro API", "docs": "/docs", "health": "/api/health"}

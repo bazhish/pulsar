@@ -86,11 +86,13 @@ npm install
 npm run dev
 ```
 
-Configure `NEXT_PUBLIC_API_BASE_URL=http://localhost:8000` quando o backend estiver em outra origem. O frontend fica em:
+Configure `NEXT_PUBLIC_API_BASE_URL=http://localhost:8000` quando o backend estiver em outra origem. Sem essa variavel, o frontend usa a mesma origem da pagina, que e o modo usado no Docker/Railway.
 
 ```bash
 http://localhost:3000
 ```
+
+No deploy Docker, o build gera `frontend/out` e o FastAPI serve o frontend exportado na rota `/`.
 
 ## Como rodar testes
 

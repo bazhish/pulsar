@@ -20,7 +20,7 @@ $env:JWT_SECRET_KEY="uma-chave-com-pelo-menos-32-caracteres"
 python -m uvicorn app.main:app --reload --port 8000
 ```
 
-Frontend:
+Frontend em desenvolvimento:
 
 ```powershell
 cd frontend
@@ -34,6 +34,8 @@ Abrir:
 ```text
 http://localhost:3000
 ```
+
+No deploy Docker/Railway, o Dockerfile roda `npm run build` com `output: "export"` e copia `frontend/out` para o container do FastAPI. Em producao, o frontend usa a mesma origem da API.
 
 ## Migração gradual
 
