@@ -5,6 +5,7 @@ from decimal import Decimal
 import pytest
 
 from app.main import (
+    SettingsPayload,
     add_months,
     distribute_installments,
     format_brl,
@@ -68,3 +69,8 @@ def test_month_range_handles_leap_year():
 def test_score_contract_range_with_stub():
     score = {"score": 720}
     assert 0 <= score["score"] <= 1000
+
+
+def test_settings_payload_accepts_zero_daily_goal_for_auto_recommendation():
+    payload = SettingsPayload(monthlyIncome="0", dailyGoal="0", reserveAmount="0")
+    assert payload.dailyGoal == Decimal("0")

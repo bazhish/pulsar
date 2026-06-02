@@ -716,7 +716,7 @@ def ensure_user_defaults_for_cursor(cursor, user_id: str) -> None:
     cursor.execute(
         """
         INSERT INTO settings (id, user_id, monthly_income, daily_goal, reserve_amount, currency)
-        VALUES (1, %s, 5500, 120, 0, 'BRL')
+        VALUES (1, %s, 0, 0, 0, 'BRL')
         ON CONFLICT (user_id, id) DO NOTHING
         """,
         (user_id,),
@@ -1620,7 +1620,7 @@ def get_goals(user_id: str, month: str) -> dict:
     outflow_to_today = round_money(current_outflow_row["outflow"])
     available_budget = round_money(monthly_income + inflow - reserve_amount)
     recommended_daily_goal = round_money(available_budget / Decimal(total_days)) if available_budget > 0 else Decimal("0.00")
-    target_daily_goal = recommended_daily_goal if recommended_daily_goal > 0 else legacy_daily_goal
+    target_daily_goal = legacy_daily_goal if legacy_daily_goal > 0 else recommended_daily_goal
     current_average_spend = round_money(outflow_to_today / Decimal(progress_day)) if progress_day > 0 else Decimal("0.00")
     projected_closing = round_money(current_average_spend * Decimal(total_days))
     allowed_remaining = round_money(available_budget - outflow_to_today)
@@ -2209,7 +2209,7 @@ class RegisterPayload(BaseModel):
 
 class SettingsPayload(BaseModel):
     monthlyIncome: Optional[Decimal] = Field(default=None, ge=0, le=999999999)
-    dailyGoal: Optional[Decimal] = Field(default=None, gt=0, le=999999999)
+    dailyGoal: Optional[Decimal] = Field(default=None, ge=0, le=999999999)
     reserveAmount: Optional[Decimal] = Field(default=None, ge=0, le=999999999)
     reserveGoalAmount: Optional[Decimal] = Field(default=None, ge=0, le=999999999)
     reserveCurrentAmount: Optional[Decimal] = Field(default=None, ge=0, le=999999999)

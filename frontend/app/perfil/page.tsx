@@ -9,10 +9,42 @@ import { formatBRL } from "@/lib/format";
 import { useAuthToken } from "@/lib/useAuthToken";
 import type { Bootstrap, User } from "@/types/finance";
 
+type PlanningForm = {
+  monthlyIncome: string;
+  dailyGoal: string;
+  reserveAmount: string;
+  reserveGoalAmount: string;
+  reserveCurrentAmount: string;
+};
+
+type ProfileForm = {
+  name: string;
+  avatarUrl: string;
+  sendMonthlySummary: boolean;
+};
+
+const emptyPlanning: PlanningForm = {
+  monthlyIncome: "0",
+  dailyGoal: "0",
+  reserveAmount: "0",
+  reserveGoalAmount: "0",
+  reserveCurrentAmount: "0"
+};
+
+function asInput(value: number | undefined | null) {
+  return String(value ?? 0);
+}
+
+function asNumber(value: string) {
+  return Number(value.replace(",", ".") || 0);
+}
+
 export default function PerfilPage() {
   const token = useAuthToken();
   const [user, setUser] = useState<User | null>(null);
   const [boot, setBoot] = useState<Bootstrap | null>(null);
+  const [planning, setPlanning] = useState<PlanningForm>(emptyPlanning);
+  const [profile, setProfile] = useState<ProfileForm>({ name: "", avatarUrl: "", sendMonthlySummary: false });
   const [message, setMessage] = useState("");
   const month = new Date().toISOString().slice(0, 7);
 
@@ -21,6 +53,18 @@ export default function PerfilPage() {
     const [nextUser, bootstrap] = await Promise.all([api.me(token), api.bootstrap(token, month)]);
     setUser(nextUser);
     setBoot(bootstrap);
+    setProfile({
+      name: nextUser.name || "",
+      avatarUrl: nextUser.avatar_url || "",
+      sendMonthlySummary: Boolean(nextUser.send_monthly_summary)
+    });
+    setPlanning({
+      monthlyIncome: asInput(bootstrap.settings.monthly_income),
+      dailyGoal: asInput(bootstrap.settings.daily_goal),
+      reserveAmount: asInput(bootstrap.settings.reserve_amount),
+      reserveGoalAmount: asInput(bootstrap.settings.reserve_goal_amount),
+      reserveCurrentAmount: asInput(bootstrap.settings.reserve_current_amount)
+    });
   }, [token, month]);
 
   useEffect(() => {
@@ -30,11 +74,10 @@ export default function PerfilPage() {
   async function saveProfile(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!token) return;
-    const form = new FormData(event.currentTarget);
     const nextUser = await api.updateProfile(token, {
-      name: String(form.get("name")),
-      avatar_url: String(form.get("avatar_url") || "") || null,
-      send_monthly_summary: Boolean(form.get("send_monthly_summary"))
+      name: profile.name,
+      avatar_url: profile.avatarUrl || null,
+      send_monthly_summary: profile.sendMonthlySummary
     });
     setUser(nextUser);
     setMessage("Perfil atualizado.");
@@ -43,16 +86,22 @@ export default function PerfilPage() {
   async function saveSettings(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!token) return;
-    const form = new FormData(event.currentTarget);
-    await api.settings(token, {
-      monthlyIncome: Number(form.get("monthlyIncome")),
-      dailyGoal: Number(form.get("dailyGoal")),
-      reserveAmount: Number(form.get("reserveAmount")),
-      reserveGoalAmount: Number(form.get("reserveGoalAmount")),
-      reserveCurrentAmount: Number(form.get("reserveCurrentAmount"))
+    const settings = await api.settings(token, {
+      monthlyIncome: asNumber(planning.monthlyIncome),
+      dailyGoal: asNumber(planning.dailyGoal),
+      reserveAmount: asNumber(planning.reserveAmount),
+      reserveGoalAmount: asNumber(planning.reserveGoalAmount),
+      reserveCurrentAmount: asNumber(planning.reserveCurrentAmount)
     });
-    setMessage("Configuracoes salvas.");
-    await load();
+    setBoot((current) => (current ? { ...current, settings } : current));
+    setPlanning({
+      monthlyIncome: asInput(settings.monthly_income),
+      dailyGoal: asInput(settings.daily_goal),
+      reserveAmount: asInput(settings.reserve_amount),
+      reserveGoalAmount: asInput(settings.reserve_goal_amount),
+      reserveCurrentAmount: asInput(settings.reserve_current_amount)
+    });
+    setMessage("Planejamento salvo.");
   }
 
   async function changePassword(event: FormEvent<HTMLFormElement>) {
@@ -79,7 +128,7 @@ export default function PerfilPage() {
 
         <div className="grid gap-3 md:grid-cols-3">
           <KpiCard label="Salario" value={formatBRL(boot?.settings.monthly_income || 0)} />
-          <KpiCard label="Reserva mensal" value={formatBRL(boot?.settings.reserve_amount || 0)} />
+          <KpiCard label="Meta diaria" value={formatBRL(boot?.settings.daily_goal || 0)} note={(boot?.settings.daily_goal || 0) > 0 ? "Manual" : "Automatica"} />
           <KpiCard label="Reserva total" value={formatBRL(boot?.settings.reserve_current_amount || 0)} note={`Meta ${formatBRL(boot?.settings.reserve_goal_amount || 0)}`} />
         </div>
 
@@ -88,14 +137,14 @@ export default function PerfilPage() {
             <h2 className="mb-3 flex items-center gap-2 font-semibold"><Settings size={18} /> Dados pessoais</h2>
             <label className="block text-sm">
               Nome
-              <input className="field mt-1" name="name" defaultValue={user?.name || ""} required />
+              <input className="field mt-1" value={profile.name} onChange={(event) => setProfile({ ...profile, name: event.target.value })} required />
             </label>
             <label className="mt-3 block text-sm">
               Avatar URL
-              <input className="field mt-1" name="avatar_url" defaultValue={user?.avatar_url || ""} placeholder="https://..." />
+              <input className="field mt-1" value={profile.avatarUrl} onChange={(event) => setProfile({ ...profile, avatarUrl: event.target.value })} placeholder="https://..." />
             </label>
             <label className="mt-3 flex items-center gap-2 text-sm">
-              <input name="send_monthly_summary" type="checkbox" defaultChecked={Boolean(user?.send_monthly_summary)} />
+              <input type="checkbox" checked={profile.sendMonthlySummary} onChange={(event) => setProfile({ ...profile, sendMonthlySummary: event.target.checked })} />
               Resumo mensal
             </label>
             <button className="btn-primary mt-4" type="submit">Salvar perfil</button>
@@ -104,12 +153,28 @@ export default function PerfilPage() {
           <form onSubmit={saveSettings} className="rounded-app border border-line bg-white p-4 shadow-soft">
             <h2 className="mb-3 font-semibold">Planejamento financeiro</h2>
             <div className="grid gap-3 sm:grid-cols-2">
-              <input className="field" name="monthlyIncome" defaultValue={boot?.settings.monthly_income || 0} placeholder="Salario" inputMode="decimal" />
-              <input className="field" name="dailyGoal" defaultValue={boot?.settings.daily_goal || 120} placeholder="Meta diaria" inputMode="decimal" />
-              <input className="field" name="reserveAmount" defaultValue={boot?.settings.reserve_amount || 0} placeholder="Reserva mensal" inputMode="decimal" />
-              <input className="field" name="reserveGoalAmount" defaultValue={boot?.settings.reserve_goal_amount || 0} placeholder="Meta total de reserva" inputMode="decimal" />
-              <input className="field" name="reserveCurrentAmount" defaultValue={boot?.settings.reserve_current_amount || 0} placeholder="Reserva atual" inputMode="decimal" />
+              <label className="text-sm">
+                Salario base
+                <input className="field mt-1" value={planning.monthlyIncome} onChange={(event) => setPlanning({ ...planning, monthlyIncome: event.target.value })} inputMode="decimal" />
+              </label>
+              <label className="text-sm">
+                Meta diaria
+                <input className="field mt-1" value={planning.dailyGoal} onChange={(event) => setPlanning({ ...planning, dailyGoal: event.target.value })} inputMode="decimal" />
+              </label>
+              <label className="text-sm">
+                Reserva mensal
+                <input className="field mt-1" value={planning.reserveAmount} onChange={(event) => setPlanning({ ...planning, reserveAmount: event.target.value })} inputMode="decimal" />
+              </label>
+              <label className="text-sm">
+                Meta total de reserva
+                <input className="field mt-1" value={planning.reserveGoalAmount} onChange={(event) => setPlanning({ ...planning, reserveGoalAmount: event.target.value })} inputMode="decimal" />
+              </label>
+              <label className="text-sm">
+                Reserva atual
+                <input className="field mt-1" value={planning.reserveCurrentAmount} onChange={(event) => setPlanning({ ...planning, reserveCurrentAmount: event.target.value })} inputMode="decimal" />
+              </label>
             </div>
+            <p className="mt-3 text-xs text-muted">Meta diaria em 0 usa a recomendacao automatica.</p>
             <button className="btn-primary mt-4" type="submit">Salvar planejamento</button>
           </form>
         </section>

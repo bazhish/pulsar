@@ -1,0 +1,3 @@
+ALTER TABLE settings
+  ALTER COLUMN monthly_income SET DEFAULT 0,
+  ALTER COLUMN daily_goal SET DEFAULT 0;

@@ -8,20 +8,29 @@ import { Shell } from "@/components/Shell";
 import { api } from "@/lib/api";
 import { useAuthToken } from "@/lib/useAuthToken";
 
+function asNumber(value: string) {
+  return Number(value.replace(",", ".") || 0);
+}
+
 export default function OnboardingPage() {
   const token = useAuthToken();
   const router = useRouter();
   const [message, setMessage] = useState("");
+  const [form, setForm] = useState({
+    monthlyIncome: "",
+    reserveAmount: "",
+    reserveGoalAmount: "",
+    dailyGoal: ""
+  });
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!token) return;
-    const form = new FormData(event.currentTarget);
     await api.settings(token, {
-      monthlyIncome: Number(form.get("monthlyIncome")),
-      reserveAmount: Number(form.get("reserveAmount")),
-      reserveGoalAmount: Number(form.get("reserveGoalAmount")),
-      dailyGoal: Number(form.get("dailyGoal"))
+      monthlyIncome: asNumber(form.monthlyIncome),
+      reserveAmount: asNumber(form.reserveAmount),
+      reserveGoalAmount: asNumber(form.reserveGoalAmount),
+      dailyGoal: asNumber(form.dailyGoal)
     });
     setMessage("Primeiro planejamento salvo.");
   }
@@ -36,11 +45,24 @@ export default function OnboardingPage() {
         {message ? <p className="mb-4 rounded-app border border-line bg-white p-3 text-sm shadow-soft">{message}</p> : null}
         <form onSubmit={save} className="rounded-app border border-line bg-white p-4 shadow-soft">
           <div className="grid gap-3 sm:grid-cols-2">
-            <input className="field" name="monthlyIncome" placeholder="Salario mensal" inputMode="decimal" required />
-            <input className="field" name="reserveAmount" placeholder="Reserva mensal desejada" inputMode="decimal" defaultValue="0" />
-            <input className="field" name="reserveGoalAmount" placeholder="Meta total de reserva" inputMode="decimal" defaultValue="0" />
-            <input className="field" name="dailyGoal" placeholder="Meta diaria" inputMode="decimal" defaultValue="120" />
+            <label className="text-sm">
+              Salario mensal
+              <input className="field mt-1" value={form.monthlyIncome} onChange={(event) => setForm({ ...form, monthlyIncome: event.target.value })} inputMode="decimal" required />
+            </label>
+            <label className="text-sm">
+              Reserva mensal desejada
+              <input className="field mt-1" value={form.reserveAmount} onChange={(event) => setForm({ ...form, reserveAmount: event.target.value })} inputMode="decimal" />
+            </label>
+            <label className="text-sm">
+              Meta total de reserva
+              <input className="field mt-1" value={form.reserveGoalAmount} onChange={(event) => setForm({ ...form, reserveGoalAmount: event.target.value })} inputMode="decimal" />
+            </label>
+            <label className="text-sm">
+              Meta diaria
+              <input className="field mt-1" value={form.dailyGoal} onChange={(event) => setForm({ ...form, dailyGoal: event.target.value })} inputMode="decimal" />
+            </label>
           </div>
+          <p className="mt-3 text-xs text-muted">Meta diaria vazia ou 0 usa a recomendacao automatica.</p>
           <button className="btn-primary mt-4" type="submit">Salvar base <ArrowRight size={16} /></button>
         </form>
         <section className="mt-4 grid gap-3 sm:grid-cols-2">
