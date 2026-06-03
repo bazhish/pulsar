@@ -10,9 +10,9 @@ export function CreditCardEducationCard() {
         <div>
           <h2 className="font-semibold">Controle sua fatura, limite e parcelas futuras.</h2>
           <p className="mt-1 text-sm text-muted">
-            Cadastre nome, bandeira, ultimos 4 digitos, limite, fechamento e vencimento. Nunca pedimos numero completo nem CVV.
+            Cadastre nome, bandeira, últimos 4 dígitos, limite, fechamento e vencimento. Nunca pedimos número completo nem CVV.
           </p>
-          <p className="mt-2 text-xs font-semibold text-ink">Este app nao processa pagamentos e nao armazena dados sensiveis do cartao.</p>
+          <p className="mt-2 text-xs font-semibold text-ink">Este app não processa pagamentos e não armazena dados sensíveis do cartão.</p>
         </div>
       </div>
     </section>

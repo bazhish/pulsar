@@ -1,0 +1,24 @@
+"use client";
+
+import { usePathname } from "next/navigation";
+import { AppShell } from "@/components/AppShell";
+
+const appRoutes = [
+  "/cartoes",
+  "/dashboard",
+  "/importar",
+  "/metas",
+  "/onboarding",
+  "/orcamento",
+  "/perfil",
+  "/relatorios",
+  "/transacoes"
+];
+
+export function RootShell({ children }: Readonly<{ children: React.ReactNode }>) {
+  const pathname = usePathname();
+  const shouldUseShell = appRoutes.some((route) => pathname.startsWith(route));
+
+  if (!shouldUseShell) return <>{children}</>;
+  return <AppShell>{children}</AppShell>;
+}

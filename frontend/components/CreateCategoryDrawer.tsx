@@ -1,0 +1,204 @@
+"use client";
+
+import { useState } from "react";
+import { X, Plus } from "lucide-react";
+import type { TransactionType } from "@/types/finance";
+
+const categoryColors = [
+  "#ef4444", // red
+  "#f97316", // orange
+  "#eab308", // yellow
+  "#22c55e", // green
+  "#06b6d4", // cyan
+  "#3b82f6", // blue
+  "#8b5cf6", // purple
+  "#ec4899", // pink
+  "#6b7280", // gray
+];
+
+const categoryIcons = [
+  "🏪", "🚗", "🏠", "👕", "🍔", "💊", "📱", "✈️", "🎬", "💪", "📚", "🎮"
+];
+
+export type CreateCategoryInput = {
+  name: string;
+  type: TransactionType;
+  color: string;
+  icon: string;
+};
+
+type CreateCategoryDrawerProps = {
+  open: boolean;
+  onClose: () => void;
+  onSubmit: (category: CreateCategoryInput) => Promise<void>;
+  defaultType?: TransactionType;
+};
+
+export function CreateCategoryDrawer({
+  open,
+  onClose,
+  onSubmit,
+  defaultType = "expense"
+}: CreateCategoryDrawerProps) {
+  const [form, setForm] = useState<CreateCategoryInput>({
+    name: "",
+    type: defaultType,
+    color: categoryColors[0],
+    icon: categoryIcons[0]
+  });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  if (!open) return null;
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!form.name.trim()) {
+      setError("Nome é obrigatório");
+      return;
+    }
+
+    setLoading(true);
+    setError("");
+    try {
+      await onSubmit(form);
+      setForm({ name: "", type: defaultType, color: categoryColors[0], icon: categoryIcons[0] });
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao criar categoria");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      {/* Blur background */}
+      <div
+        className="absolute inset-0 bg-black/30 backdrop-blur-sm"
+        onClick={onClose}
+      />
+
+      {/* Modal */}
+      <div className="relative bg-white rounded-app shadow-lift p-6 max-w-md w-full mx-4">
+        <div className="flex items-center justify-between gap-4 mb-4">
+          <h2 className="text-lg font-bold">Criar categoria</h2>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-muted hover:text-ink transition p-1"
+            aria-label="Fechar"
+          >
+            <X size={20} />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <label className="block text-sm">
+            <span className="font-semibold text-ink">Nome da categoria</span>
+            <input
+              type="text"
+              className="field mt-1 w-full"
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              placeholder="Ex: Alimentação, Transporte"
+              disabled={loading}
+              autoFocus
+            />
+          </label>
+
+          <label className="block text-sm">
+            <span className="font-semibold text-ink">Tipo</span>
+            <div className="grid grid-cols-2 gap-2 mt-1">
+              {(["expense", "income"] as const).map((type) => (
+                <button
+                  key={type}
+                  type="button"
+                  onClick={() => setForm({ ...form, type })}
+                  className={`p-3 rounded-app border-2 text-sm font-semibold transition ${
+                    form.type === type
+                      ? type === "expense"
+                        ? "border-coral bg-coral/10 text-coral"
+                        : "border-leaf bg-leaf/10 text-leaf"
+                      : "border-line bg-white hover:bg-white/75"
+                  }`}
+                  disabled={loading}
+                >
+                  {type === "expense" ? "Despesa" : "Entrada"}
+                </button>
+              ))}
+            </div>
+          </label>
+
+          <label className="block text-sm">
+            <span className="font-semibold text-ink">Cor</span>
+            <div className="grid grid-cols-5 gap-2 mt-1">
+              {categoryColors.map((color) => (
+                <button
+                  key={color}
+                  type="button"
+                  onClick={() => setForm({ ...form, color })}
+                  className={`h-10 rounded-app border-2 transition ${
+                    form.color === color
+                      ? "border-ink scale-110"
+                      : "border-white/50 hover:border-white"
+                  }`}
+                  style={{ backgroundColor: color }}
+                  aria-label={`Selecionar cor ${color}`}
+                  disabled={loading}
+                />
+              ))}
+            </div>
+          </label>
+
+          <label className="block text-sm">
+            <span className="font-semibold text-ink">Ícone</span>
+            <div className="grid grid-cols-6 gap-2 mt-1">
+              {categoryIcons.map((icon) => (
+                <button
+                  key={icon}
+                  type="button"
+                  onClick={() => setForm({ ...form, icon })}
+                  className={`h-10 text-xl rounded-app border-2 flex items-center justify-center transition ${
+                    form.icon === icon
+                      ? "border-ink scale-110 bg-white/75"
+                      : "border-white/50 hover:border-white hover:bg-white/50"
+                  }`}
+                  aria-label={`Selecionar ícone ${icon}`}
+                  disabled={loading}
+                >
+                  {icon}
+                </button>
+              ))}
+            </div>
+          </label>
+
+          {error && (
+            <p className="text-sm text-coral bg-coral/10 p-3 rounded-app">
+              {error}
+            </p>
+          )}
+
+          <div className="flex gap-2">
+            <button
+              type="submit"
+              className="btn-primary flex-1"
+              disabled={loading}
+            >
+              <Plus size={16} />
+              Criar categoria
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="btn-secondary flex-1"
+              disabled={loading}
+            >
+              Cancelar
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}

@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import { WalletCards, X } from "lucide-react";
+import { MoneyInput } from "@/components/MoneyInput";
 import type { Settings } from "@/types/finance";
 
 type PlanningValues = {
@@ -17,28 +18,20 @@ type FinancialPlanningDrawerProps = {
   onSave: (values: PlanningValues) => Promise<void>;
 };
 
-function asInput(value: number | undefined | null) {
-  return String(value ?? 0);
-}
-
-function asNumber(value: string) {
-  return Number(value.replace(",", ".") || 0);
-}
-
 export function FinancialPlanningDrawer({ open, settings, onClose, onSave }: FinancialPlanningDrawerProps) {
   const [form, setForm] = useState({
-    monthlyIncome: "0",
-    reserveAmount: "0",
-    dailyGoal: "0"
+    monthlyIncome: 0,
+    reserveAmount: 0,
+    dailyGoal: 0
   });
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (!open) return;
     setForm({
-      monthlyIncome: asInput(settings?.monthly_income),
-      reserveAmount: asInput(settings?.reserve_amount),
-      dailyGoal: asInput(settings?.daily_goal)
+      monthlyIncome: settings?.monthly_income ?? 0,
+      reserveAmount: settings?.reserve_amount ?? 0,
+      dailyGoal: settings?.daily_goal ?? 0
     });
   }, [open, settings]);
 
@@ -47,9 +40,9 @@ export function FinancialPlanningDrawer({ open, settings, onClose, onSave }: Fin
     setSaving(true);
     try {
       await onSave({
-        monthlyIncome: asNumber(form.monthlyIncome),
-        reserveAmount: asNumber(form.reserveAmount),
-        dailyGoal: asNumber(form.dailyGoal)
+        monthlyIncome: form.monthlyIncome,
+        reserveAmount: form.reserveAmount,
+        dailyGoal: form.dailyGoal
       });
       onClose();
     } finally {
@@ -66,10 +59,10 @@ export function FinancialPlanningDrawer({ open, settings, onClose, onSave }: Fin
           <div>
             <p className="flex items-center gap-2 text-sm font-semibold text-pulse">
               <WalletCards size={18} />
-              Ajustes rapidos
+              Ajustes rápidos
             </p>
             <h2 className="mt-1 text-xl font-black">Editar planejamento</h2>
-            <p className="mt-1 text-sm text-muted">Atualize o salario, a reserva planejada e a meta diaria usada no Resumo.</p>
+            <p className="mt-1 text-sm text-muted">Atualize o salário, a reserva planejada e a meta diária usada no Resumo.</p>
           </div>
           <button className="focus-ring h-9 w-9 rounded-app border border-line bg-white" type="button" onClick={onClose} aria-label="Fechar">
             <X className="mx-auto" size={16} />
@@ -78,16 +71,16 @@ export function FinancialPlanningDrawer({ open, settings, onClose, onSave }: Fin
 
         <form onSubmit={submit} className="space-y-3">
           <label className="block text-sm">
-            Salario base
-            <input className="field mt-1" value={form.monthlyIncome} onChange={(event) => setForm({ ...form, monthlyIncome: event.target.value })} inputMode="decimal" />
+            Salário base
+            <MoneyInput className="field mt-1" value={form.monthlyIncome} onValueChange={(monthlyIncome) => setForm({ ...form, monthlyIncome })} />
           </label>
           <label className="block text-sm">
-            Reserva planejada no mes
-            <input className="field mt-1" value={form.reserveAmount} onChange={(event) => setForm({ ...form, reserveAmount: event.target.value })} inputMode="decimal" />
+            Reserva planejada no mês
+            <MoneyInput className="field mt-1" value={form.reserveAmount} onValueChange={(reserveAmount) => setForm({ ...form, reserveAmount })} />
           </label>
           <label className="block text-sm">
-            Meta diaria
-            <input className="field mt-1" value={form.dailyGoal} onChange={(event) => setForm({ ...form, dailyGoal: event.target.value })} inputMode="decimal" />
+            Meta diária
+            <MoneyInput className="field mt-1" value={form.dailyGoal} onValueChange={(dailyGoal) => setForm({ ...form, dailyGoal })} />
             <span className="mt-1 block text-xs text-muted">Use 0 para deixar o app recomendar a meta automaticamente.</span>
           </label>
           <div className="flex flex-col gap-2 pt-2 sm:flex-row">

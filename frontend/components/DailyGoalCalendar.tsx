@@ -33,7 +33,7 @@ export function DailyGoalCalendar({ goal, transactions = [] }: DailyGoalCalendar
     return (
       <EmptyState
         title="Nenhum dia para mostrar"
-        description="Defina seu planejamento e cadastre despesas para ver o ritmo diario do mes."
+        description="Defina seu planejamento e cadastre despesas para ver o ritmo diário do mês."
         actionLabel="Cadastrar despesa"
         href="/transacoes"
         icon={ReceiptText}
@@ -59,11 +59,11 @@ export function DailyGoalCalendar({ goal, transactions = [] }: DailyGoalCalendar
             <dd className="font-semibold">{formatBRL(activeDay?.spent || 0)}</dd>
           </div>
           <div className="flex justify-between gap-3">
-            <dt className="text-muted">Meta do dia</dt>
+            <dt className="text-muted">Meta de referência</dt>
             <dd className="font-semibold">{formatBRL(goal.targetDailyGoal || 0)}</dd>
           </div>
           <div className="flex justify-between gap-3">
-            <dt className="text-muted">Diferenca</dt>
+            <dt className="text-muted">Diferença</dt>
             <dd className={(activeDay?.remaining || 0) < 0 ? "font-semibold text-coral" : "font-semibold text-leaf"}>{formatBRL(activeDay?.remaining || 0)}</dd>
           </div>
         </dl>

@@ -13,7 +13,7 @@ type MovementTabsProps = {
 };
 
 const tabs: Array<{ value: TransactionType | ""; label: string; helper: string }> = [
-  { value: "expense", label: "Despesas", helper: "Gastos do mes" },
+  { value: "expense", label: "Despesas", helper: "Gastos do mês" },
   { value: "income", label: "Entradas", helper: "Dinheiro que entrou" },
   { value: "", label: "Todas", helper: "Tudo junto" }
 ];

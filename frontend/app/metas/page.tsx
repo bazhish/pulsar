@@ -6,6 +6,7 @@ import { DailyGoalCalendar } from "@/components/DailyGoalCalendar";
 import { FirstTimeExplainer } from "@/components/FirstTimeExplainer";
 import { KpiCard } from "@/components/KpiCard";
 import { MonthPicker } from "@/components/MonthPicker";
+import { PageHeader } from "@/components/PageHeader";
 import { SectionIntro } from "@/components/SectionIntro";
 import { Shell } from "@/components/Shell";
 import { api } from "@/lib/api";
@@ -22,56 +23,70 @@ export default function MetasPage() {
 
   useEffect(() => {
     if (!token) return;
-    Promise.all([api.goals(token, month), api.bootstrap(token, month)])
-      .then(([nextGoal, bootstrap]) => {
+    Promise.all([api.goals(token, month), api.transactions(token, { month, type: "expense" })])
+      .then(([nextGoal, nextTransactions]) => {
         setGoal(nextGoal);
-        setTransactions(bootstrap.transactions);
+        setTransactions(nextTransactions);
       })
       .catch((err) => setMessage(err instanceof Error ? err.message : "Falha ao carregar."));
   }, [token, month]);
 
+  async function acceptRecommendedGoal() {
+    if (!token || !goal?.recommendedDailyGoal) return;
+    await api.settings(token, { dailyGoal: goal.recommendedDailyGoal });
+    const nextGoal = await api.goals(token, month);
+    setGoal(nextGoal);
+    setMessage("Meta diária definida com a recomendação do Pulsar.");
+  }
+
   return (
     <Shell>
       <div className="mx-auto max-w-6xl px-4 py-5 sm:py-6">
-        <header className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h1 className="flex items-center gap-2 text-2xl font-bold">
-              <CalendarDays size={24} />
-              Metas diarias
-            </h1>
-            <p className="text-sm text-muted">{goal?.riskAlert || "Acompanhe seu ritmo dia a dia."}</p>
-          </div>
-          <MonthPicker value={month} onChange={setMonth} />
-        </header>
+        <PageHeader
+          actions={<MonthPicker value={month} onChange={setMonth} />}
+          description={goal?.riskAlert || "Acompanhe seu ritmo dia a dia."}
+          icon={CalendarDays}
+          title="Metas diárias"
+        />
 
         <FirstTimeExplainer
           storageKey="rf_seen_goals_intro"
-          title="Cada circulo representa um dia do mes"
-          description="Quanto mais cheio, mais perto voce chegou da meta diaria. Verde esta dentro, amarelo pede atencao, vermelho passou da meta e cinza nao teve gasto."
+          title="Cada círculo representa um dia do mês"
+          description="Quanto mais cheio, mais perto você chegou da meta diária. Verde está dentro, amarelo pede atenção, vermelho passou da meta e cinza não teve gasto."
         />
 
         {message ? <p className="app-card mb-4 p-3 text-sm text-ink">{message}</p> : null}
 
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <KpiCard label="Meta recomendada" value={formatBRL(goal?.recommendedDailyGoal || 0)} tone="good" />
-          <KpiCard label="Meta em uso" value={formatBRL(goal?.targetDailyGoal || 0)} note={(goal?.dailyGoal || 0) > 0 ? "Definida por voce" : "Recomendada pelo app"} />
+          <KpiCard
+            label="Sua meta diária"
+            value={(goal?.dailyGoal || 0) > 0 ? formatBRL(goal?.dailyGoal || 0) : "Não definida"}
+            note={(goal?.dailyGoal || 0) > 0 ? "Definida por você" : "Você ainda não definiu uma meta diária"}
+          />
+          <KpiCard label="Recomendado pelo Pulsar" value={formatBRL(goal?.recommendedDailyGoal || 0)} tone="good" />
           <KpiCard label="Permitido restante" value={formatBRL(goal?.allowedRemaining || 0)} tone={(goal?.allowedRemaining || 0) < 0 ? "danger" : "neutral"} />
-          <KpiCard label="Projecao de gasto" value={formatBRL(goal?.projectedClosing || 0)} tone={goal?.goalStatus === "red" ? "danger" : goal?.goalStatus === "yellow" ? "warning" : "good"} />
+          <KpiCard label="Projeção de gasto" value={formatBRL(goal?.projectedClosing || 0)} tone={goal?.goalStatus === "red" ? "danger" : goal?.goalStatus === "yellow" ? "warning" : "good"} />
         </div>
+
+        {goal && goal.dailyGoal <= 0 && goal.recommendedDailyGoal > 0 ? (
+          <button className="btn-secondary mt-3" type="button" onClick={() => acceptRecommendedGoal().catch((err) => setMessage(err instanceof Error ? err.message : "Falha ao salvar meta."))}>
+            Usar recomendação como meta
+          </button>
+        ) : null}
 
         <section className="app-card mt-4 p-4">
           <SectionIntro
-            title="Calendario do ritmo"
-            description="Cada circulo representa um dia do mes. Quanto mais cheio, mais perto voce chegou da sua meta diaria."
-            helpText="Toque em um dia para ver gasto, meta, diferenca e as principais despesas daquele dia."
+            title="Calendário do ritmo"
+            description="Cada círculo representa um dia do mês. Quanto mais cheio, mais perto você chegou da sua meta diária."
+            helpText="Toque em um dia para ver gasto, meta, diferença e as principais despesas daquele dia."
           />
           <DailyGoalCalendar goal={goal} transactions={transactions} />
         </section>
 
         <section className="mt-4 grid gap-3 md:grid-cols-3">
-          <KpiCard label="Media atual" value={formatBRL(goal?.currentAverageSpend || 0)} />
+          <KpiCard label="Média atual" value={formatBRL(goal?.currentAverageSpend || 0)} />
           <KpiCard label="Reserva planejada" value={formatBRL(goal?.reserveAmount || 0)} />
-          <KpiCard label="Orcamento mensal" value={formatBRL(goal?.availableBudget || 0)} />
+          <KpiCard label="Orçamento mensal" value={formatBRL(goal?.availableBudget || 0)} />
         </section>
       </div>
     </Shell>

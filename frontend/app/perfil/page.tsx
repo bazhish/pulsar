@@ -3,6 +3,8 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { Settings, UserRound } from "lucide-react";
 import { KpiCard } from "@/components/KpiCard";
+import { MoneyInput } from "@/components/MoneyInput";
+import { PageHeader } from "@/components/PageHeader";
 import { SectionIntro } from "@/components/SectionIntro";
 import { Shell } from "@/components/Shell";
 import { api } from "@/lib/api";
@@ -11,11 +13,11 @@ import { useAuthToken } from "@/lib/useAuthToken";
 import type { Bootstrap, User } from "@/types/finance";
 
 type PlanningForm = {
-  monthlyIncome: string;
-  dailyGoal: string;
-  reserveAmount: string;
-  reserveGoalAmount: string;
-  reserveCurrentAmount: string;
+  monthlyIncome: number;
+  dailyGoal: number;
+  reserveAmount: number;
+  reserveGoalAmount: number;
+  reserveCurrentAmount: number;
 };
 
 type ProfileForm = {
@@ -25,20 +27,12 @@ type ProfileForm = {
 };
 
 const emptyPlanning: PlanningForm = {
-  monthlyIncome: "0",
-  dailyGoal: "0",
-  reserveAmount: "0",
-  reserveGoalAmount: "0",
-  reserveCurrentAmount: "0"
+  monthlyIncome: 0,
+  dailyGoal: 0,
+  reserveAmount: 0,
+  reserveGoalAmount: 0,
+  reserveCurrentAmount: 0
 };
-
-function asInput(value: number | undefined | null) {
-  return String(value ?? 0);
-}
-
-function asNumber(value: string) {
-  return Number(value.replace(",", ".") || 0);
-}
 
 export default function PerfilPage() {
   const token = useAuthToken();
@@ -60,11 +54,11 @@ export default function PerfilPage() {
       sendMonthlySummary: Boolean(nextUser.send_monthly_summary)
     });
     setPlanning({
-      monthlyIncome: asInput(bootstrap.settings.monthly_income),
-      dailyGoal: asInput(bootstrap.settings.daily_goal),
-      reserveAmount: asInput(bootstrap.settings.reserve_amount),
-      reserveGoalAmount: asInput(bootstrap.settings.reserve_goal_amount),
-      reserveCurrentAmount: asInput(bootstrap.settings.reserve_current_amount)
+      monthlyIncome: bootstrap.settings.monthly_income ?? 0,
+      dailyGoal: bootstrap.settings.daily_goal ?? 0,
+      reserveAmount: bootstrap.settings.reserve_amount ?? 0,
+      reserveGoalAmount: bootstrap.settings.reserve_goal_amount ?? 0,
+      reserveCurrentAmount: bootstrap.settings.reserve_current_amount ?? 0
     });
   }, [token, month]);
 
@@ -88,19 +82,19 @@ export default function PerfilPage() {
     event.preventDefault();
     if (!token) return;
     const settings = await api.settings(token, {
-      monthlyIncome: asNumber(planning.monthlyIncome),
-      dailyGoal: asNumber(planning.dailyGoal),
-      reserveAmount: asNumber(planning.reserveAmount),
-      reserveGoalAmount: asNumber(planning.reserveGoalAmount),
-      reserveCurrentAmount: asNumber(planning.reserveCurrentAmount)
+      monthlyIncome: planning.monthlyIncome,
+      dailyGoal: planning.dailyGoal,
+      reserveAmount: planning.reserveAmount,
+      reserveGoalAmount: planning.reserveGoalAmount,
+      reserveCurrentAmount: planning.reserveCurrentAmount
     });
     setBoot((current) => (current ? { ...current, settings } : current));
     setPlanning({
-      monthlyIncome: asInput(settings.monthly_income),
-      dailyGoal: asInput(settings.daily_goal),
-      reserveAmount: asInput(settings.reserve_amount),
-      reserveGoalAmount: asInput(settings.reserve_goal_amount),
-      reserveCurrentAmount: asInput(settings.reserve_current_amount)
+      monthlyIncome: settings.monthly_income ?? 0,
+      dailyGoal: settings.daily_goal ?? 0,
+      reserveAmount: settings.reserve_amount ?? 0,
+      reserveGoalAmount: settings.reserve_goal_amount ?? 0,
+      reserveCurrentAmount: settings.reserve_current_amount ?? 0
     });
     setMessage("Planejamento salvo.");
   }
@@ -120,17 +114,17 @@ export default function PerfilPage() {
   return (
     <Shell>
       <div className="mx-auto max-w-5xl px-4 py-5 sm:py-6">
-        <header className="mb-5 rounded-app border border-white/70 bg-gradient-to-br from-white to-mint/70 p-4 shadow-soft">
-          <p className="flex items-center gap-2 text-sm font-bold text-pulse"><UserRound size={18} /> Perfil</p>
-          <h1 className="mt-1 text-2xl font-black">Ajustes da sua conta</h1>
-          <p className="text-sm text-muted">{user?.email || ""}</p>
-        </header>
+        <PageHeader
+          description={user?.email || ""}
+          icon={UserRound}
+          title="Ajustes da sua conta"
+        />
 
         {message ? <p className="app-card mb-4 p-3 text-sm">{message}</p> : null}
 
         <div className="grid gap-3 md:grid-cols-3">
-          <KpiCard label="Salario" value={formatBRL(boot?.settings.monthly_income || 0)} />
-          <KpiCard label="Meta diaria" value={formatBRL(boot?.settings.daily_goal || 0)} note={(boot?.settings.daily_goal || 0) > 0 ? "Manual" : "Automatica"} />
+          <KpiCard label="Salário" value={formatBRL(boot?.settings.monthly_income || 0)} />
+          <KpiCard label="Meta diária" value={formatBRL(boot?.settings.daily_goal || 0)} note={(boot?.settings.daily_goal || 0) > 0 ? "Manual" : "Automática"} />
           <KpiCard label="Reserva total" value={formatBRL(boot?.settings.reserve_current_amount || 0)} note={`Meta ${formatBRL(boot?.settings.reserve_goal_amount || 0)}`} />
         </div>
 
@@ -138,7 +132,7 @@ export default function PerfilPage() {
           <form onSubmit={saveProfile} className="app-card p-4">
             <SectionIntro
               title="Dados pessoais"
-              description="Informacoes basicas usadas para personalizar o Resumo."
+              description="Informações básicas usadas para personalizar o Resumo."
               action={<Settings size={18} className="text-pulse" />}
             />
             <label className="block text-sm">
@@ -159,32 +153,32 @@ export default function PerfilPage() {
           <form onSubmit={saveSettings} className="app-card p-4">
             <SectionIntro
               title="Planejamento financeiro"
-              description="Valores usados nos calculos de ritmo, metas e saldo previsto."
-              helpText="Meta diaria em 0 deixa o app recomendar automaticamente."
+              description="Valores usados nos cálculos de ritmo, metas e saldo previsto."
+              helpText="Meta diária em 0 deixa o app recomendar automaticamente."
             />
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="text-sm">
-                Salario base
-                <input className="field mt-1" value={planning.monthlyIncome} onChange={(event) => setPlanning({ ...planning, monthlyIncome: event.target.value })} inputMode="decimal" />
+                Salário base
+                <MoneyInput className="field mt-1" value={planning.monthlyIncome} onValueChange={(monthlyIncome) => setPlanning({ ...planning, monthlyIncome })} />
               </label>
               <label className="text-sm">
-                Meta diaria
-                <input className="field mt-1" value={planning.dailyGoal} onChange={(event) => setPlanning({ ...planning, dailyGoal: event.target.value })} inputMode="decimal" />
+                Meta diária
+                <MoneyInput className="field mt-1" value={planning.dailyGoal} onValueChange={(dailyGoal) => setPlanning({ ...planning, dailyGoal })} />
               </label>
               <label className="text-sm">
                 Reserva mensal
-                <input className="field mt-1" value={planning.reserveAmount} onChange={(event) => setPlanning({ ...planning, reserveAmount: event.target.value })} inputMode="decimal" />
+                <MoneyInput className="field mt-1" value={planning.reserveAmount} onValueChange={(reserveAmount) => setPlanning({ ...planning, reserveAmount })} />
               </label>
               <label className="text-sm">
                 Meta total de reserva
-                <input className="field mt-1" value={planning.reserveGoalAmount} onChange={(event) => setPlanning({ ...planning, reserveGoalAmount: event.target.value })} inputMode="decimal" />
+                <MoneyInput className="field mt-1" value={planning.reserveGoalAmount} onValueChange={(reserveGoalAmount) => setPlanning({ ...planning, reserveGoalAmount })} />
               </label>
               <label className="text-sm">
                 Reserva atual
-                <input className="field mt-1" value={planning.reserveCurrentAmount} onChange={(event) => setPlanning({ ...planning, reserveCurrentAmount: event.target.value })} inputMode="decimal" />
+                <MoneyInput className="field mt-1" value={planning.reserveCurrentAmount} onValueChange={(reserveCurrentAmount) => setPlanning({ ...planning, reserveCurrentAmount })} />
               </label>
             </div>
-            <p className="mt-3 text-xs text-muted">Meta diaria em 0 usa a recomendacao automatica.</p>
+            <p className="mt-3 text-xs text-muted">Meta diária em 0 usa a recomendação automática.</p>
             <button className="btn-primary mt-4" type="submit">Salvar planejamento</button>
           </form>
         </section>
@@ -192,7 +186,7 @@ export default function PerfilPage() {
         <form onSubmit={changePassword} className="app-card mt-4 p-4">
           <SectionIntro
             title="Senha"
-            description="Atualize sua senha quando precisar reforcar a seguranca."
+            description="Atualize sua senha quando precisar reforçar a segurança."
           />
           <div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto]">
             <input className="field" name="current_password" type="password" placeholder="Senha atual" required />

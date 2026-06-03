@@ -202,7 +202,7 @@ async def validate_content_type(request: Request, call_next):
         and content_type not in ("application/json", "multipart/form-data", "application/x-www-form-urlencoded", "")
     ):
         return JSONResponse(
-            {"detail": "Content-Type invalido."},
+            {"detail": "Content-Type inválido."},
             status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
         )
     return await call_next(request)
@@ -1870,7 +1870,7 @@ def calculate_score(user_id: str, month: str) -> dict:
     inflow = totals["inflow"]
     outflow = totals["outflow"]
     base = 1000
-    breakdown = {"gastos": 0, "consistencia": 0, "reservas": 0, "cartoes": 0, "orcamento": 0}
+    breakdown = {"gastos": 0, "consistência": 0, "reservas": 0, "cartões": 0, "orçamento": 0}
 
     denominator = monthly_income + inflow
     ratio_gastos = (outflow / denominator) if denominator > 0 else (Decimal("1") if outflow > 0 else Decimal("0"))
@@ -1897,9 +1897,9 @@ def calculate_score(user_id: str, month: str) -> dict:
         consistency_row = require_row(normalize_row(cursor.fetchone()), "Consist\u00eancia n\u00e3o encontrada.")
         total_recent = int(consistency_row["total"])
         if total_recent >= 20:
-            breakdown["consistencia"] = 50
+            breakdown["consistência"] = 50
         elif total_recent >= 10:
-            breakdown["consistencia"] = 25
+            breakdown["consistência"] = 25
 
         cursor.execute(
             """
@@ -1924,17 +1924,17 @@ def calculate_score(user_id: str, month: str) -> dict:
             continue
         uso_pct = get_invoice_total(user_id, int(card["id"]), month) / credit_limit
         if uso_pct > Decimal("0.9"):
-            breakdown["cartoes"] -= 80
+            breakdown["cartões"] -= 80
         elif uso_pct > Decimal("0.7"):
-            breakdown["cartoes"] -= 40
+            breakdown["cartões"] -= 40
 
     budget = get_budget_summary(user_id, month)
     over_budget = len([item for item in budget["items"] if item["status"] == "over"])
     attention_budget = len([item for item in budget["items"] if item["status"] == "attention"])
     if over_budget:
-        breakdown["orcamento"] -= min(120, over_budget * 40)
+        breakdown["orçamento"] -= min(120, over_budget * 40)
     elif budget["items"] and not attention_budget:
-        breakdown["orcamento"] += 50
+        breakdown["orçamento"] += 50
 
     base += sum(breakdown.values())
     score = max(0, min(1000, int(base)))
@@ -2076,7 +2076,7 @@ def get_alerts_for_month(user_id: str, month: str) -> list[dict]:
                 {
                     "type": "danger",
                     "category": "orcamento",
-                    "message": f"{item['categoryName']} passou do orcamento em {format_brl(abs(item['remaining']))}",
+                    "message": f"{item['categoryName']} passou do orçamento em {format_brl(abs(item['remaining']))}",
                 }
             )
         elif item["status"] == "attention":
@@ -2084,7 +2084,7 @@ def get_alerts_for_month(user_id: str, month: str) -> list[dict]:
                 {
                     "type": "warning",
                     "category": "orcamento",
-                    "message": f"{item['categoryName']} esta perto do limite planejado.",
+                    "message": f"{item['categoryName']} está perto do limite planejado.",
                 }
             )
 
@@ -2276,6 +2276,30 @@ class PurchaseSimulationPayload(BaseModel):
     totalInstallments: int = Field(..., ge=2, le=24)
     purchaseDate: str = Field(..., min_length=10, max_length=10)
     months: int = Field(default=12, ge=1, le=24)
+
+    class Config:
+        extra = "forbid"
+
+
+class InstallmentSimulationPayload(BaseModel):
+    totalAmount: Decimal = Field(..., gt=0, le=999999999)
+    totalInstallments: int = Field(..., ge=2, le=24)
+    interestRate: float = Field(default=0, ge=0, le=100)
+    purchaseDate: str = Field(..., min_length=10, max_length=10)
+    months: int = Field(default=12, ge=1, le=24)
+
+    class Config:
+        extra = "forbid"
+
+
+class InstallmentWithoutCardPayload(BaseModel):
+    title: str = Field(..., min_length=1, max_length=200)
+    categoryId: Optional[int] = Field(default=None, ge=1)
+    totalAmount: Decimal = Field(..., gt=0, le=999999999)
+    totalInstallments: int = Field(..., ge=2, le=24)
+    interestRate: float = Field(default=0, ge=0, le=100)
+    purchaseDate: str = Field(..., min_length=10, max_length=10)
+    notes: str = Field(default="", max_length=1000)
 
     class Config:
         extra = "forbid"
@@ -2669,7 +2693,7 @@ def auth_stats(current_user: dict = Depends(get_current_user)) -> dict:
 @app.post("/api/auth/logout")
 def logout(token: str = Depends(oauth2_scheme), current_user: dict = Depends(get_current_user)) -> dict:
     revoke_token(token, current_user["id"])
-    return {"message": "Sessao encerrada no servidor."}
+    return {"message": "Sessão encerrada no servidor."}
 
 
 @app.get("/api/bootstrap")
@@ -2883,9 +2907,9 @@ def save_budget(payload: BudgetPayload, current_user: dict = Depends(get_current
                 """,
                 (user_id, payload.categoryId, month_key, round_money(payload.plannedAmount)),
             )
-            row = require_row(normalize_row(cursor.fetchone()), "Orcamento nao salvo.")
+            row = require_row(normalize_row(cursor.fetchone()), "Orçamento não salvo.")
     except errors.ForeignKeyViolation:
-        raise HTTPException(status_code=400, detail="Categoria invalida.")
+        raise HTTPException(status_code=400, detail="Categoria inválida.")
     return row
 
 
@@ -2949,9 +2973,9 @@ def create_categorization_rule(
                 """,
                 (user_id, pattern, payload.categoryId, payment_method),
             )
-            return require_row(normalize_row(cursor.fetchone()), "Regra nao criada.")
+            return require_row(normalize_row(cursor.fetchone()), "Regra não criada.")
     except errors.ForeignKeyViolation:
-        raise HTTPException(status_code=400, detail="Categoria invalida.")
+        raise HTTPException(status_code=400, detail="Categoria inválida.")
 
 
 @app.get("/api/reports")
@@ -3243,7 +3267,7 @@ def update_transaction(
         )
         current = normalize_row(cursor.fetchone())
     if not current:
-        raise HTTPException(status_code=404, detail="Lancamento nao encontrado.")
+        raise HTTPException(status_code=404, detail="Lançamento não encontrado.")
 
     title = clean_text(payload.title, "Titulo", 200) if "title" in fields_set and payload.title else current["title"]
     amount = round_money(payload.amount if "amount" in fields_set and payload.amount is not None else current["amount"])
@@ -3260,7 +3284,7 @@ def update_transaction(
         else current["transaction_date"]
     )
     notes = (
-        clean_text(payload.notes or "", "Observacoes", 1000, required=False)
+        clean_text(payload.notes or "", "Observações", 1000, required=False)
         if "notes" in fields_set
         else current.get("notes", "")
     )
@@ -3298,9 +3322,9 @@ def update_transaction(
                     transaction_id,
                 ),
             )
-            row = require_row(normalize_row(cursor.fetchone()), "Lancamento nao atualizado.")
+            row = require_row(normalize_row(cursor.fetchone()), "Lançamento não atualizado.")
     except errors.ForeignKeyViolation:
-        raise HTTPException(status_code=400, detail="Categoria ou cartao invalido.")
+        raise HTTPException(status_code=400, detail="Categoria ou cartão inválido.")
 
     return row
 
@@ -3483,19 +3507,19 @@ def export_pdf(request: Request, month: Optional[str] = None, current_user: dict
 
     lines = [
         "Ritmo Financeiro Pro",
-        f"Relatorio financeiro - {month_key}",
+        f"Relatório financeiro - {month_key}",
         "",
-        f"Salario base: {format_brl(settings['monthly_income'] or 0)}",
+        f"Salário base: {format_brl(settings['monthly_income'] or 0)}",
         f"Entradas: {format_brl(totals['inflow'])}",
-        f"Saidas: {format_brl(totals['outflow'])}",
+        f"Saídas: {format_brl(totals['outflow'])}",
         f"Saldo projetado: {format_brl(balance)}",
         f"Ritmo Score: {score_data['score']} - {score_data['label']}",
         "",
-        "Movimentacoes",
+        "Movimentações",
     ]
 
     if not rows:
-        lines.append("Nenhuma transacao encontrada para este mes.")
+        lines.append("Nenhuma transação encontrada para este mês.")
     for row in rows:
         installment = ""
         if row.get("total_installments"):
@@ -3545,11 +3569,11 @@ def update_card(card_id: int, payload: CardUpdatePayload, current_user: dict = D
     user_id = current_user["id"]
     current = get_card_for_user(user_id, card_id)
     fields_set = getattr(payload, "model_fields_set", getattr(payload, "__fields_set__", set()))
-    name = clean_text(payload.name, "Nome do cartao", 100) if "name" in fields_set and payload.name else current["name"]
+    name = clean_text(payload.name, "Nome do cartão", 100) if "name" in fields_set and payload.name else current["name"]
     brand = clean_text(payload.brand, "Bandeira", 40) if "brand" in fields_set and payload.brand else current["brand"]
-    last_four = clean_text(payload.lastFour, "Final do cartao", 4) if "lastFour" in fields_set and payload.lastFour else current["last_four"]
+    last_four = clean_text(payload.lastFour, "Final do cartão", 4) if "lastFour" in fields_set and payload.lastFour else current["last_four"]
     if not str(last_four).isdigit():
-        raise HTTPException(status_code=400, detail="Final do cartao deve conter 4 numeros.")
+        raise HTTPException(status_code=400, detail="Final do cartão deve conter 4 números.")
     credit_limit = round_money(
         payload.creditLimit if "creditLimit" in fields_set and payload.creditLimit is not None else current["credit_limit"]
     )
@@ -3573,7 +3597,7 @@ def update_card(card_id: int, payload: CardUpdatePayload, current_user: dict = D
             """,
             (name, brand, last_four, credit_limit, closing_day, due_day, color, user_id, card_id),
         )
-        return require_row(normalize_row(cursor.fetchone()), "Cartao nao atualizado.")
+        return require_row(normalize_row(cursor.fetchone()), "Cartão não atualizado.")
 
 
 @app.delete("/api/cards/{card_id}")
@@ -3589,11 +3613,11 @@ def delete_card(
             "SELECT COUNT(*) AS total FROM transactions WHERE user_id = %s AND card_id = %s",
             (user_id, card_id),
         )
-        linked = int(require_row(normalize_row(cursor.fetchone()), "Cartao nao encontrado.")["total"])
+        linked = int(require_row(normalize_row(cursor.fetchone()), "Cartão não encontrado.")["total"])
         if linked and not force:
             raise HTTPException(
                 status_code=409,
-                detail="Cartao possui lancamentos vinculados. Revise antes de excluir ou use force=true.",
+                detail="Cartão possui lançamentos vinculados. Revise antes de excluir ou use force=true.",
             )
         if linked and force:
             cursor.execute(
@@ -3678,6 +3702,167 @@ def create_installments(card_id: int, payload: InstallmentPayload, current_user:
     }
 
 
+@app.post("/api/installments/simulate")
+def simulate_installments(
+    payload: InstallmentSimulationPayload,
+    current_user: dict = Depends(get_current_user),
+) -> dict:
+    """Simula o impacto de uma compra parcelada sem exigir cartão cadastrado."""
+    user_id = current_user["id"]
+    purchase_date = validate_date_text(payload.purchaseDate, "Data da compra")
+    base_month = month_key_from_date(purchase_date)
+    
+    try:
+        installment_amounts = distribute_installments(payload.totalAmount, payload.totalInstallments)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    
+    # Aplicar juros se fornecido
+    if payload.interestRate > 0:
+        interest_rate = round_money(Decimal(payload.interestRate) / Decimal("100"))
+        total_with_interest = round_money(payload.totalAmount * (Decimal("1") + interest_rate * Decimal(payload.totalInstallments) / Decimal("2")))
+        installment_amounts = distribute_installments(total_with_interest, payload.totalInstallments)
+    
+    simulated_by_month = {
+        add_months(base_month, index): amount for index, amount in enumerate(installment_amounts)
+    }
+    
+    projection = []
+    for month_offset in range(payload.months):
+        month_key = add_months(base_month, month_offset)
+        simulated_amount = round_money(simulated_by_month.get(month_key, Decimal("0")))
+        projection.append({
+            "month": month_key,
+            "simulatedInstallment": simulated_amount,
+            "projectedTotal": simulated_amount,
+        })
+    
+    return {
+        "totalAmount": round_money(payload.totalAmount),
+        "totalInstallments": payload.totalInstallments,
+        "interestRate": payload.interestRate,
+        "installments": [float(x) for x in installment_amounts],
+        "projection": projection,
+    }
+
+
+@app.post("/api/installments")
+def create_installments_without_card(
+    payload: InstallmentWithoutCardPayload,
+    current_user: dict = Depends(get_current_user),
+) -> dict:
+    """Cria uma compra parcelada sem exigir cartão cadastrado."""
+    user_id = current_user["id"]
+    title = clean_text(payload.title, "Descrição da compra", 200)
+    notes = clean_text(payload.notes, "Observações", 1000, required=False)
+    purchase_date = validate_date_text(payload.purchaseDate, "Data da compra")
+    base_month = month_key_from_date(purchase_date)
+    
+    try:
+        installment_amounts = distribute_installments(payload.totalAmount, payload.totalInstallments)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    
+    # Aplicar juros se fornecido
+    if payload.interestRate > 0:
+        interest_rate = round_money(Decimal(payload.interestRate) / Decimal("100"))
+        total_with_interest = round_money(payload.totalAmount * (Decimal("1") + interest_rate * Decimal(payload.totalInstallments) / Decimal("2")))
+        installment_amounts = distribute_installments(total_with_interest, payload.totalInstallments)
+    
+    try:
+        with db_cursor(commit=True) as cursor:
+            group = f"{user_id}-installment-{title}-{purchase_date}"
+            for number, amount in enumerate(installment_amounts, start=1):
+                cursor.execute(
+                    """
+                    INSERT INTO transactions
+                      (user_id, title, amount, type, category_id, payment_method, transaction_date, notes,
+                       billing_month, installment_group, installment_number, total_installments, source)
+                    VALUES (%s, %s, %s, 'expense', %s, 'compra parcelada', %s, %s, %s, %s, %s, %s, 'manual')
+                    """,
+                    (
+                        user_id,
+                        title,
+                        amount,
+                        payload.categoryId,
+                        purchase_date,
+                        notes,
+                        add_months(base_month, number - 1),
+                        group,
+                        number,
+                        payload.totalInstallments,
+                    ),
+                )
+    except errors.ForeignKeyViolation:
+        raise HTTPException(status_code=400, detail="Categoria inválida.")
+    
+    return {
+        "createdInstallments": payload.totalInstallments,
+        "group": group,
+        "totalAmount": round_money(payload.totalAmount),
+    }
+
+
+@app.get("/api/installments/future")
+def get_future_installments(
+    month: str = Query(..., min_length=7, max_length=7),
+    limit: int = Query(default=24, ge=1, le=48),
+    current_user: dict = Depends(get_current_user),
+) -> dict:
+    """Retorna parcelas futuras do usuário."""
+    user_id = current_user["id"]
+    
+    with db_cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT 
+                billing_month,
+                title,
+                COALESCE(c.name, 'Sem categoria') as category_name,
+                amount,
+                installment_number,
+                total_installments
+            FROM transactions t
+            LEFT JOIN categories c ON t.category_id = c.id
+            WHERE t.user_id = %s 
+              AND t.type = 'expense'
+              AND t.installment_group IS NOT NULL
+              AND billing_month >= %s
+            ORDER BY billing_month ASC, installment_number ASC
+            LIMIT %s
+            """,
+            (user_id, month, limit),
+        )
+        rows = normalize_rows(cursor.fetchall())
+    
+    installments = []
+    total_by_month = {}
+    
+    for row in rows:
+        installments.append({
+            "month": row["billing_month"],
+            "title": row["title"],
+            "categoryName": row["category_name"],
+            "amount": float(row["amount"]),
+            "installmentNumber": row["installment_number"],
+            "totalInstallments": row["total_installments"],
+        })
+        
+        month_key = row["billing_month"]
+        if month_key not in total_by_month:
+            total_by_month[month_key] = Decimal("0")
+        total_by_month[month_key] += Decimal(str(row["amount"]))
+    
+    # Calcular média mensal
+    total_commitment = sum(total_by_month.values()) if total_by_month else Decimal("0")
+    avg_monthly = round_money(total_commitment / len(total_by_month)) if total_by_month else Decimal("0")
+    
+    return {
+        "installments": installments,
+        "totalMonthlyCommitment": float(avg_monthly),
+    }
+
+
 @app.delete("/api/transactions/{transaction_id}")
 def delete_transaction(transaction_id: int, current_user: dict = Depends(get_current_user)) -> dict:
     user_id = current_user["id"]
@@ -3729,11 +3914,11 @@ if FRONTEND_OUT_DIR.exists():
     @app.get("/{frontend_path:path}")
     def frontend_route(frontend_path: str) -> FileResponse:
         if frontend_path.startswith("api/"):
-            raise HTTPException(status_code=404, detail="Rota nao encontrada.")
+            raise HTTPException(status_code=404, detail="Rota não encontrada.")
 
         path = Path(frontend_path)
         if path.is_absolute() or ".." in path.parts:
-            raise HTTPException(status_code=404, detail="Arquivo nao encontrado.")
+            raise HTTPException(status_code=404, detail="Arquivo não encontrado.")
 
         direct_file = FRONTEND_OUT_DIR / path
         if direct_file.is_file():

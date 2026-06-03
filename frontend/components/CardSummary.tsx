@@ -25,7 +25,7 @@ export function CardSummary({ card }: { card: Card }) {
           <strong className="metric-number">{formatBRL(card.invoice || 0)}</strong>
         </span>
         <span>
-          Limite disponivel
+          Limite disponível
           <br />
           <strong className="metric-number">{formatBRL(available)}</strong>
         </span>

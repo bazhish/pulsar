@@ -1,12 +1,15 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useState } from "react";
-import { Copy, PiggyBank, Plus } from "lucide-react";
+import { Copy, HelpCircle, PiggyBank, Plus } from "lucide-react";
 import { BudgetCategoryCard } from "@/components/BudgetCategoryCard";
+import { BudgetHelpModal } from "@/components/BudgetHelpModal";
 import { EmptyState } from "@/components/EmptyState";
 import { FirstTimeExplainer } from "@/components/FirstTimeExplainer";
 import { KpiCard } from "@/components/KpiCard";
+import { MoneyInput } from "@/components/MoneyInput";
 import { MonthPicker } from "@/components/MonthPicker";
+import { PageHeader } from "@/components/PageHeader";
 import { SectionIntro } from "@/components/SectionIntro";
 import { Shell } from "@/components/Shell";
 import { api } from "@/lib/api";
@@ -20,18 +23,15 @@ function previousMonth(value: string) {
   return `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, "0")}`;
 }
 
-function asNumber(value: string) {
-  return Number(value.replace(",", ".") || 0);
-}
-
 export default function OrcamentoPage() {
   const token = useAuthToken();
   const [month, setMonth] = useState(new Date().toISOString().slice(0, 7));
   const [budget, setBudget] = useState<BudgetSummary | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
   const [categoryId, setCategoryId] = useState("");
-  const [plannedAmount, setPlannedAmount] = useState("");
+  const [plannedAmount, setPlannedAmount] = useState(0);
   const [message, setMessage] = useState("");
+  const [showHelpModal, setShowHelpModal] = useState(false);
 
   const load = useCallback(async () => {
     if (!token) return;
@@ -47,10 +47,10 @@ export default function OrcamentoPage() {
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!token || !categoryId) return;
-    await api.saveBudget(token, { categoryId: Number(categoryId), month, plannedAmount: asNumber(plannedAmount) });
+    await api.saveBudget(token, { categoryId: Number(categoryId), month, plannedAmount });
     setCategoryId("");
-    setPlannedAmount("");
-    setMessage("Orcamento salvo.");
+    setPlannedAmount(0);
+    setMessage("Orçamento salvo.");
     await load();
   }
 
@@ -58,35 +58,41 @@ export default function OrcamentoPage() {
     if (!token) return;
     const copied = await api.copyBudget(token, { fromMonth: previousMonth(month), toMonth: month });
     setBudget(copied);
-    setMessage("Orcamento copiado do mes anterior.");
+    setMessage("Orçamento copiado do mês anterior.");
   }
 
   return (
     <Shell>
       <div className="mx-auto max-w-6xl px-4 py-5 sm:py-6">
-        <header className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h1 className="flex items-center gap-2 text-2xl font-bold"><PiggyBank size={24} /> Orcamento</h1>
-            <p className="text-sm text-muted">Quanto voce quer gastar em cada categoria este mes?</p>
-          </div>
-          <MonthPicker value={month} onChange={setMonth} />
-        </header>
-
-        <FirstTimeExplainer
-          storageKey="rf_seen_budget_intro"
-          title="Orcamento e so limite por categoria"
-          description="Defina quanto pretende gastar em alimentacao, transporte, lazer e outras areas. O app mostra quando voce esta tranquilo, em atencao ou estourado."
+        <PageHeader
+          actions={
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setShowHelpModal(true)}
+                className="btn-secondary"
+                aria-label="Como funciona o orçamento?"
+              >
+                <HelpCircle size={16} />
+                Como funciona?
+              </button>
+              <MonthPicker value={month} onChange={setMonth} />
+            </div>
+          }
+          description="Defina limites para cada categoria e acompanhe seus gastos."
+          icon={PiggyBank}
+          title="Orçamento"
         />
 
-        {message ? <p className="app-card mb-4 p-3 text-sm text-ink">{message}</p> : null}
+        <FirstTimeExplainer
+          storageKey="pulsar_seen_budget_intro"
+          title="Orçamento ajuda você a gastar melhor"
+          description="Defina limites por categoria e o app avisa quando você está perto de gastar demais. Assim você mantém as despesas sob controle."
+        />
 
-        <section className="mb-4 rounded-app border border-pulse/20 bg-gradient-to-r from-mint to-white p-4 shadow-soft">
-          <h2 className="font-semibold">Use o orcamento para definir limites por categoria.</h2>
-          <p className="mt-1 text-sm text-muted">Assim voce sabe quando esta perto de gastar demais.</p>
-          <div className="mt-3 rounded-app border border-white/80 bg-white/80 p-3 text-sm shadow-sm">
-            <strong>Exemplo:</strong> se Alimentacao = R$ 600 e voce ja gastou R$ 450, o sistema mostra 75% usado.
-          </div>
-        </section>
+        <BudgetHelpModal open={showHelpModal} onClose={() => setShowHelpModal(false)} />
+
+        {message ? <p className="app-card mb-4 p-3 text-sm text-ink">{message}</p> : null}
 
         <div className="grid gap-3 sm:grid-cols-3">
           <KpiCard label="Planejado" value={formatBRL(budget?.totalPlanned || 0)} />
@@ -96,32 +102,32 @@ export default function OrcamentoPage() {
 
         <form onSubmit={handleSubmit} className="app-card mt-4 p-4">
           <SectionIntro
-            title="Criar ou editar limite"
-            description="Escolha uma categoria e diga o valor planejado para este mes."
-            helpText="Se a categoria ja tiver orcamento, salvar de novo atualiza o limite."
+            title="Definir ou atualizar limite"
+            description="Escolha uma categoria e diga quanto você pretende gastar neste mês."
+            helpText="Se a categoria já tiver limite, salvar novamente atualiza o valor."
           />
           <div className="grid gap-3 md:grid-cols-[1fr_180px_auto_auto]">
             <label className="text-sm">
               Categoria
               <select className="field mt-1" value={categoryId} onChange={(event) => setCategoryId(event.target.value)} required>
-                <option value="">Selecione</option>
+                <option value="">Selecione uma categoria</option>
                 {categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
               </select>
             </label>
             <label className="text-sm">
-              Valor planejado
-              <input className="field mt-1" value={plannedAmount} inputMode="decimal" onChange={(event) => setPlannedAmount(event.target.value)} required />
+              Limite mensal
+              <MoneyInput className="field mt-1" value={plannedAmount} onValueChange={setPlannedAmount} required />
             </label>
             <button className="btn-primary self-end" type="submit"><Plus size={16} />Salvar limite</button>
-            <button className="btn-secondary self-end" type="button" onClick={() => handleCopy().catch(console.error)}><Copy size={16} />Copiar anterior</button>
+            <button className="btn-secondary self-end" type="button" onClick={() => handleCopy().catch(console.error)}><Copy size={16} />Copiar do mês anterior</button>
           </div>
         </form>
 
         <section className="mt-4">
           <SectionIntro
-            title="Limites por categoria"
-            description="Acompanhe valor planejado, gasto, restante e status de cada categoria."
-            helpText="Tranquilo significa dentro do limite. Atencao indica que voce esta perto. Estourado passou do planejado."
+            title="Acompanhe seus limites"
+            description="Veja quanto você pretendeu gastar, quanto já gastou e quanto ainda pode gastar em cada categoria."
+            helpText="Os cores indicam se está tudo bem (tranquilo), se está perto do limite (atenção) ou se passou (estourado)."
           />
           {(budget?.items || []).length ? (
             <div className="grid gap-3 md:grid-cols-2">
@@ -129,9 +135,9 @@ export default function OrcamentoPage() {
             </div>
           ) : (
             <EmptyState
-              title="Voce ainda nao definiu orcamento para este mes"
-              description="Comece definindo quanto pretende gastar em cada categoria. Exemplo: Alimentacao R$ 600, Transporte R$ 300."
-              actionLabel="Criar orcamento"
+              title="Você ainda não definiu limite para este mês"
+              description="Comece definindo quanto você pretende gastar em cada categoria. Por exemplo: Alimentação R$ 600, Transporte R$ 200. Assim o app avisa quando você está perto do limite."
+              actionLabel="Definir primeiro limite"
               onAction={() => document.querySelector<HTMLSelectElement>("select.field")?.focus()}
               icon={PiggyBank}
             />
@@ -140,9 +146,9 @@ export default function OrcamentoPage() {
 
         <section className="app-card mt-4 p-4">
           <SectionIntro
-            title="Categorias sem orcamento"
-            description="Essas categorias tiveram gasto no mes, mas ainda nao tem limite definido."
-            helpText="Adicionar limite aqui ajuda o app a avisar antes do gasto sair do controle."
+            title="Categorias que ainda não têm limite"
+            description="Essas categorias tiveram gastos no mês, mas você ainda não definiu um limite para elas."
+            helpText="Recomendamos definir limites para todas as categorias que você gasta."
           />
           <div className="flex flex-wrap gap-2">
             {(budget?.unbudgetedCategories || []).map((category) => (
@@ -150,7 +156,7 @@ export default function OrcamentoPage() {
                 {category.categoryName} / {formatBRL(category.spent)}
               </span>
             ))}
-            {!budget?.unbudgetedCategories.length ? <p className="text-sm text-muted">Todas as categorias ativas tem orcamento.</p> : null}
+            {!budget?.unbudgetedCategories.length ? <p className="text-sm text-muted">Todas as categorias ativas têm orçamento.</p> : null}
           </div>
         </section>
       </div>

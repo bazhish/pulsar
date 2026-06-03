@@ -41,9 +41,29 @@ async def test_goals_return_budget_projection_and_risk_status(client, auth_heade
     assert goals["reserveAmount"] == 300
     assert goals["availableBudget"] == 2700
     assert goals["recommendedDailyGoal"] == 87.1
+    assert goals["targetDailyGoal"] == 100
+    assert goals["dailyGoal"] != goals["recommendedDailyGoal"]
     assert goals["daysAboveGoal"] == 1
     assert goals["projectedClosing"] == 900
     assert goals["goalStatus"] == "green"
+
+
+@pytest.mark.asyncio
+async def test_user_daily_goal_stays_separate_from_recommended_goal(client, auth_headers):
+    settings_response = await client.post(
+        "/api/settings",
+        headers=auth_headers,
+        json={"monthlyIncome": 3000, "dailyGoal": 80, "reserveAmount": 0},
+    )
+    assert settings_response.status_code == 200, settings_response.text
+
+    response = await client.get("/api/goals?month=2024-05", headers=auth_headers)
+    assert response.status_code == 200, response.text
+    goals = response.json()
+
+    assert goals["dailyGoal"] == 80
+    assert goals["recommendedDailyGoal"] == 96.77
+    assert goals["targetDailyGoal"] == 80
 
 
 @pytest.mark.asyncio

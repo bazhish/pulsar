@@ -7,9 +7,9 @@ export function TransactionList({ items }: { items: Transaction[] }) {
   if (!items.length) {
     return (
       <EmptyState
-        title="Nenhuma movimentacao ainda"
+        title="Nenhuma movimentação ainda"
         description="Cadastre entradas e despesas para acompanhar seu fluxo financeiro."
-        actionLabel="Cadastrar movimentacao"
+        actionLabel="Cadastrar movimentação"
         href="/transacoes"
         icon={ReceiptText}
       />

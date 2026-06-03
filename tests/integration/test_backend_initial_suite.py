@@ -131,6 +131,7 @@ async def test_salary_update_persists_across_bootstrap_and_login(client):
     initial = initial_response.json()
     assert initial["settings"]["monthly_income"] == 0
     assert initial["dashboard"]["salaryBase"] == 0
+    assert initial["settings"]["monthly_income"] != 5500
 
     settings_response = await client.post(
         "/api/settings",
@@ -146,6 +147,13 @@ async def test_salary_update_persists_across_bootstrap_and_login(client):
     assert bootstrap["settings"]["monthly_income"] == 2500
     assert bootstrap["dashboard"]["salaryBase"] == 2500
     assert bootstrap["dashboard"]["monthlyIncome"] == 2500
+    assert bootstrap["settings"]["monthly_income"] != 5500
+
+    goals_response = await client.get("/api/goals?month=2024-05", headers=headers)
+    assert goals_response.status_code == 200, goals_response.text
+    goals = goals_response.json()
+    assert goals["availableBudget"] == 2300
+    assert goals["dailyGoal"] == 90
 
     login_response = await client.post("/api/auth/login", data={"email": user["email"], "password": "Senha123"})
     assert login_response.status_code == 200
@@ -155,3 +163,18 @@ async def test_salary_update_persists_across_bootstrap_and_login(client):
     after_login = after_login_response.json()
     assert after_login["settings"]["monthly_income"] == 2500
     assert after_login["dashboard"]["salaryBase"] == 2500
+    assert after_login["settings"]["monthly_income"] != 5500
+
+
+@pytest.mark.asyncio
+async def test_settings_reject_invalid_numeric_values(client):
+    user = await register_user(client)
+    headers = {"Authorization": f"Bearer {user['token']}"}
+
+    response = await client.post(
+        "/api/settings",
+        headers=headers,
+        json={"monthlyIncome": "abc", "dailyGoal": 0, "reserveAmount": 0},
+    )
+
+    assert response.status_code == 422

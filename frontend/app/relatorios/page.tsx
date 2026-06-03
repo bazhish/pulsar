@@ -7,6 +7,7 @@ import { ChartCard } from "@/components/ChartCard";
 import { EmptyState } from "@/components/EmptyState";
 import { KpiCard } from "@/components/KpiCard";
 import { MonthPicker } from "@/components/MonthPicker";
+import { PageHeader } from "@/components/PageHeader";
 import { SectionIntro } from "@/components/SectionIntro";
 import { Shell } from "@/components/Shell";
 import { api } from "@/lib/api";
@@ -47,19 +48,18 @@ export default function RelatoriosPage() {
   return (
     <Shell>
       <div className="mx-auto max-w-6xl px-4 py-5 sm:py-6">
-        <header className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h1 className="flex items-center gap-2 text-2xl font-bold"><FileText size={24} /> Relatorios</h1>
-            <p className="text-sm text-muted">Analise o mes com calma ou exporte CSV/PDF.</p>
-          </div>
-          <MonthPicker value={month} onChange={setMonth} />
-        </header>
+        <PageHeader
+          actions={<MonthPicker value={month} onChange={setMonth} />}
+          description="Analise o mês com calma ou exporte CSV/PDF."
+          icon={FileText}
+          title="Relatórios"
+        />
 
         {message ? <p className="app-card mb-4 p-3 text-sm">{message}</p> : null}
 
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <KpiCard label="Entradas" value={formatBRL(report?.dashboard.inflow || 0)} tone="good" />
-          <KpiCard label="Saidas" value={formatBRL(report?.dashboard.outflow || 0)} />
+          <KpiCard label="Saídas" value={formatBRL(report?.dashboard.outflow || 0)} />
           <KpiCard label="Saldo projetado" value={formatBRL(report?.dashboard.projectedBalance || 0)} tone={(report?.dashboard.projectedBalance || 0) < 0 ? "danger" : "good"} />
           <KpiCard label="Ritmo Score" value={String(report?.score.score || "--")} note={report?.score.label} />
         </div>
@@ -77,8 +77,8 @@ export default function RelatoriosPage() {
           <ChartCard title="Categorias">
             <SectionIntro
               title="Gastos por categoria"
-              description="Compare onde o dinheiro saiu no mes."
-              helpText="Use este grafico para achar categorias que merecem limite no Orcamento."
+              description="Compare onde o dinheiro saiu no mês."
+              helpText="Use este gráfico para achar categorias que merecem limite no Orçamento."
             />
             <div className="h-64">
               {categoryRows.length && chartsReady ? <ResponsiveContainer width="100%" height="100%">
@@ -89,15 +89,15 @@ export default function RelatoriosPage() {
                   <Tooltip formatter={(value) => formatBRL(Number(value))} />
                   <Bar dataKey="total" fill="#14B8A6" radius={[6, 6, 0, 0]} />
                 </BarChart>
-              </ResponsiveContainer> : <EmptyState title="Sem categorias para analisar" description="Cadastre despesas para gerar o relatorio por categoria." actionLabel="Cadastrar despesa" href="/transacoes" icon={FileText} />}
+              </ResponsiveContainer> : <EmptyState title="Sem categorias para analisar" description="Cadastre despesas para gerar o relatório por categoria." actionLabel="Cadastrar despesa" href="/transacoes" icon={FileText} />}
             </div>
           </ChartCard>
 
-          <ChartCard title="Composicao do score">
+          <ChartCard title="Composição do score">
             <SectionIntro
               title="Ritmo Score"
               description="Entenda os fatores que puxam seu score para cima ou para baixo."
-              helpText="O score resume uso do salario, metas, reservas e organizacao do mes."
+              helpText="O score resume uso do salário, metas, reservas e organização do mês."
             />
             <div className="space-y-3">
               {Object.entries(report?.score.breakdown || {}).map(([key, value]) => (
@@ -112,7 +112,7 @@ export default function RelatoriosPage() {
                 </div>
               ))}
               {!Object.entries(report?.score.breakdown || {}).length ? (
-                <EmptyState title="Score ainda sem composicao" description="O score aparece quando houver planejamento e movimentacoes no mes." icon={FileText} />
+                <EmptyState title="Score ainda sem composição" description="O score aparece quando houver planejamento e movimentações no mês." icon={FileText} />
               ) : null}
             </div>
           </ChartCard>
@@ -120,9 +120,9 @@ export default function RelatoriosPage() {
 
         <section className="app-card mt-4 p-4">
           <SectionIntro
-            title="Orcamento por categoria"
-            description="Veja os limites planejados e o quanto ja foi usado em cada categoria."
-            helpText="Se esta area estiver vazia, va em Orcamento e crie limites para o mes."
+            title="Orçamento por categoria"
+            description="Veja os limites planejados e o quanto já foi usado em cada categoria."
+            helpText="Se esta área estiver vazia, vá em Orçamento e crie limites para o mês."
           />
           <div className="mt-3 grid gap-2 md:grid-cols-2">
             {(report?.budget.items || []).map((item) => (
@@ -133,7 +133,7 @@ export default function RelatoriosPage() {
             ))}
           </div>
           {!report?.budget.items.length ? (
-            <EmptyState title="Nenhum orcamento no relatorio" description="Crie limites por categoria para acompanhar o planejado contra o gasto." actionLabel="Criar orcamento" href="/orcamento" icon={FileText} />
+            <EmptyState title="Nenhum orçamento no relatório" description="Crie limites por categoria para acompanhar o planejado contra o gasto." actionLabel="Criar orçamento" href="/orcamento" icon={FileText} />
           ) : null}
         </section>
       </div>

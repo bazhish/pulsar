@@ -1,14 +1,9 @@
 "use client";
 
-import { BottomNav } from "@/components/BottomNav";
-import { Sidebar } from "@/components/Sidebar";
+import { AppShell, useInsideAppShell } from "@/components/AppShell";
 
 export function Shell({ children }: Readonly<{ children: React.ReactNode }>) {
-  return (
-    <div className="min-h-screen lg:grid lg:grid-cols-[280px_1fr]">
-      <Sidebar />
-      <main className="pb-24 lg:pb-0">{children}</main>
-      <BottomNav />
-    </div>
-  );
+  const insideAppShell = useInsideAppShell();
+  if (insideAppShell) return <>{children}</>;
+  return <AppShell>{children}</AppShell>;
 }

@@ -3,7 +3,7 @@ import type { BudgetItem } from "@/types/finance";
 
 const statusLabel = {
   ok: "Tranquilo",
-  attention: "Atencao",
+  attention: "Atenção",
   over: "Estourado"
 };
 
@@ -25,7 +25,7 @@ export function BudgetCategoryCard({ item }: { item: BudgetItem }) {
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <h3 className="truncate font-bold">{item.categoryName}</h3>
-          <p className="mt-1 text-sm text-muted">Quanto voce quer gastar nessa categoria este mes.</p>
+          <p className="mt-1 text-sm text-muted">Seu limite para este mês nesta categoria.</p>
         </div>
         <span className={`rounded-app px-2 py-1 text-xs font-semibold ${statusClass[item.status]}`}>{statusLabel[item.status]}</span>
       </div>

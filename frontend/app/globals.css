@@ -16,6 +16,10 @@ body {
   color: #102033;
 }
 
+html {
+  scroll-behavior: smooth;
+}
+
 button,
 input,
 select {
@@ -53,4 +57,28 @@ select {
 .metric-number {
   @apply font-black tracking-normal text-ink;
   font-variant-numeric: tabular-nums;
+}
+
+.scrollbar-none {
+  scrollbar-width: none;
+}
+
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
+.animate-shell-content {
+  animation: shell-content-in 160ms ease-out;
+}
+
+@keyframes shell-content-in {
+  from {
+    opacity: 0.88;
+    transform: translateY(2px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }

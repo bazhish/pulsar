@@ -14,10 +14,30 @@ import type {
 } from "@/types/finance";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "";
+const GET_CACHE_TTL_MS = 30_000;
 
 type RequestOptions = RequestInit & {
   token?: string | null;
 };
+
+type CacheEntry = {
+  data: unknown;
+  timestamp: number;
+};
+
+const responseCache = new Map<string, CacheEntry>();
+const pendingRequests = new Map<string, Promise<unknown>>();
+
+function cacheKey(path: string, token?: string | null) {
+  return `${token || "public"}::${path}`;
+}
+
+function invalidateTokenCache(token?: string | null) {
+  const prefix = `${token || "public"}::`;
+  for (const key of responseCache.keys()) {
+    if (key.startsWith(prefix)) responseCache.delete(key);
+  }
+}
 
 function withQuery(path: string, params: Record<string, string | number | undefined | null>) {
   const search = new URLSearchParams();
@@ -29,22 +49,49 @@ function withQuery(path: string, params: Record<string, string | number | undefi
 }
 
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  const method = (options.method || "GET").toUpperCase();
+  const isGet = method === "GET";
+  const key = cacheKey(path, options.token);
+
+  if (isGet) {
+    const cached = responseCache.get(key);
+    if (cached && Date.now() - cached.timestamp < GET_CACHE_TTL_MS) return cached.data as T;
+
+    const pending = pendingRequests.get(key);
+    if (pending) return pending as Promise<T>;
+  }
+
   const headers = new Headers(options.headers);
   if (options.token) headers.set("Authorization", `Bearer ${options.token}`);
   if (options.body && !(options.body instanceof FormData) && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
   }
 
-  const response = await fetch(`${API_BASE_URL}${path}`, {
+  const promise = fetch(`${API_BASE_URL}${path}`, {
     ...options,
     headers,
     cache: "no-store"
+  }).then(async (response) => {
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: "Falha na requisição." }));
+      throw new Error(error.detail || error.error || "Falha na requisição.");
+    }
+
+    const data = await response.json();
+    if (isGet) {
+      responseCache.set(key, { data, timestamp: Date.now() });
+    } else {
+      invalidateTokenCache(options.token);
+    }
+    return data as T;
   });
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ detail: "Falha na requisicao." }));
-    throw new Error(error.detail || error.error || "Falha na requisicao.");
+
+  if (isGet) {
+    pendingRequests.set(key, promise);
+    promise.finally(() => pendingRequests.delete(key)).catch(() => undefined);
   }
-  return response.json() as Promise<T>;
+
+  return promise;
 }
 
 export type TransactionFilters = {
@@ -142,6 +189,33 @@ export const api = {
     return request<{ projection: Array<{ month: string; currentInvoice: number; simulatedInstallment: number; projectedTotal: number }> }>(
       `/api/cards/${cardId}/purchase-simulation`,
       { method: "POST", token, body: JSON.stringify(payload) }
+    );
+  },
+  simulateInstallments(token: string, payload: { totalAmount: number; totalInstallments: number; interestRate?: number; purchaseDate: string; months?: number }) {
+    return request<{ projection: Array<{ month: string; simulatedInstallment: number; projectedTotal: number }> }>(
+      "/api/installments/simulate",
+      { method: "POST", token, body: JSON.stringify(payload) }
+    );
+  },
+  createInstallmentsWithoutCard(token: string, payload: {
+    title: string;
+    categoryId?: number | null;
+    totalAmount: number;
+    totalInstallments: number;
+    interestRate?: number;
+    purchaseDate: string;
+    notes?: string;
+  }) {
+    return request<{ createdInstallments: number; group: string }>("/api/installments", {
+      method: "POST",
+      token,
+      body: JSON.stringify(payload)
+    });
+  },
+  getFutureInstallments(token: string, filters: { month?: string; limit?: number }) {
+    return request<{ installments: Array<{ month: string; title: string; categoryName: string; amount: number; installmentNumber: number; totalInstallments: number }>; totalMonthlyCommitment: number }>(
+      withQuery("/api/installments/future", filters),
+      { token }
     );
   },
   categories(token: string, payload: Pick<Category, "name" | "type" | "color" | "icon">) {

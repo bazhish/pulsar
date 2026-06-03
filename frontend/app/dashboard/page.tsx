@@ -5,6 +5,7 @@ import Image from "next/image";
 import { FinancialPlanningDrawer } from "@/components/FinancialPlanningDrawer";
 import { FirstTimeExplainer } from "@/components/FirstTimeExplainer";
 import { MonthPicker } from "@/components/MonthPicker";
+import { PageHeader } from "@/components/PageHeader";
 import { Shell } from "@/components/Shell";
 import { SummaryHome } from "@/components/SummaryHome";
 import { api } from "@/lib/api";
@@ -44,23 +45,21 @@ export default function DashboardPage() {
   return (
     <Shell>
       <div className="mx-auto max-w-6xl px-4 py-5 sm:py-6">
-        <header className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-3">
+        <PageHeader
+          actions={<MonthPicker value={month} onChange={setMonth} />}
+          description="O essencial do seu mês em uma tela limpa."
+          media={
             <div className="rounded-app bg-white/80 p-2 shadow-soft">
               <Image src="/logo.svg" alt="Ritmo Financeiro Pro" width={180} height={50} priority />
             </div>
-            <div>
-              <h1 className="text-2xl font-bold">Resumo</h1>
-              <p className="text-sm text-muted">O essencial do seu mes em uma tela limpa.</p>
-            </div>
-          </div>
-          <MonthPicker value={month} onChange={setMonth} />
-        </header>
+          }
+          title="Resumo"
+        />
 
         <FirstTimeExplainer
           storageKey="rf_seen_summary_intro"
           title="Seu Resumo ficou mais direto"
-          description="Aqui voce ve quanto pode gastar hoje, o status do ritmo financeiro e a proxima melhor acao. Os detalhes continuam nas outras abas."
+          description="Aqui você vê quanto pode gastar hoje, o status do ritmo financeiro e a próxima melhor ação. Os detalhes continuam nas outras abas."
         />
 
         {message ? <p className="app-card mb-4 p-3 text-sm text-ink">{message}</p> : null}

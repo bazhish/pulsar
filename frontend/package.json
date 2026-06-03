@@ -6,6 +6,7 @@
     "dev": "next dev -p 3000",
     "build": "next build",
     "lint": "next lint",
+    "test:money": "node --test --experimental-strip-types lib/money.test.mts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

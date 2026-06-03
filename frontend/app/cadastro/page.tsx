@@ -36,11 +36,11 @@ export default function CadastroPage() {
             <Sparkles size={16} />
             Comece leve
           </span>
-          <h2 className="mt-6 max-w-md text-4xl font-black leading-tight text-ink">Seu dinheiro com metas claras e menos ruido.</h2>
-          <p className="mt-3 max-w-md text-sm text-muted">Configure salario, reserva e acompanhe o ritmo do mes sem uma tela cheia de termos bancarios.</p>
+          <h2 className="mt-6 max-w-md text-4xl font-black leading-tight text-ink">Seu dinheiro com metas claras e menos ruído.</h2>
+          <p className="mt-3 max-w-md text-sm text-muted">Configure salário, reserva e acompanhe o ritmo do mês sem uma tela cheia de termos bancários.</p>
         </div>
         <div className="grid grid-cols-3 gap-3">
-          {["Resumo limpo", "Metas visuais", "Orcamento simples"].map((item) => (
+          {["Resumo limpo", "Metas visuais", "Orçamento simples"].map((item) => (
             <div key={item} className="rounded-app border border-white/80 bg-white/75 p-4 shadow-soft">
               <BadgeCheck className="text-pulse" size={20} />
               <strong className="mt-3 block text-sm">{item}</strong>
@@ -71,7 +71,7 @@ export default function CadastroPage() {
             Criar conta
             <ArrowRight size={16} />
           </button>
-          <Link className="mt-4 block text-center text-sm font-bold text-plum" href="/login">Ja tenho conta</Link>
+          <Link className="mt-4 block text-center text-sm font-bold text-plum" href="/login">Já tenho conta</Link>
         </form>
       </section>
     </main>

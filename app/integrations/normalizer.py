@@ -24,7 +24,7 @@ def parse_decimal_text(value: Any) -> Decimal:
         raise ValueError("Valor vazio.")
     cleaned = re.sub(r"[^\d,.\-+]", "", text)
     if not cleaned:
-        raise ValueError("Valor invalido.")
+        raise ValueError("Valor inválido.")
     if "," in cleaned and "." in cleaned:
         cleaned = cleaned.replace(".", "").replace(",", ".")
     elif "," in cleaned:

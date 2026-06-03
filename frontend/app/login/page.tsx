@@ -51,13 +51,13 @@ export default function LoginPage() {
         <div>
           <span className="inline-flex items-center gap-2 rounded-app bg-white/10 px-3 py-2 text-sm font-semibold">
             <TrendingUp size={16} />
-            Ritmo do mes
+            Ritmo do mês
           </span>
-          <h2 className="mt-6 max-w-md text-4xl font-black leading-tight">Organizacao financeira pessoal com leitura rapida.</h2>
-          <p className="mt-3 max-w-md text-sm text-white/70">Resumo, metas, orcamento e cartoes em uma experiencia limpa, jovem e confiavel.</p>
+          <h2 className="mt-6 max-w-md text-4xl font-black leading-tight">Organização financeira pessoal com leitura rápida.</h2>
+          <p className="mt-3 max-w-md text-sm text-white/70">Resumo, metas, orçamento e cartões em uma experiência limpa, jovem e confiável.</p>
         </div>
         <div className="grid grid-cols-3 gap-3">
-          {["Resumo", "Metas", "Cartoes"].map((item) => (
+          {["Resumo", "Metas", "Cartões"].map((item) => (
             <div key={item} className="rounded-app border border-white/10 bg-white/10 p-4 backdrop-blur">
               <ShieldCheck className="text-pulse" size={20} />
               <strong className="mt-3 block">{item}</strong>

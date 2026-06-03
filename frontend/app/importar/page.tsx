@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { FileUp, Wand2 } from "lucide-react";
 import { EmptyState } from "@/components/EmptyState";
+import { PageHeader } from "@/components/PageHeader";
 import { SectionIntro } from "@/components/SectionIntro";
 import { Shell } from "@/components/Shell";
 import { api } from "@/lib/api";
@@ -70,24 +71,25 @@ export default function ImportarPage() {
       paymentMethod: String(form.get("paymentMethod") || "csv_import")
     });
     event.currentTarget.reset();
-    setMessage("Regra criada. Ela sera aplicada nas proximas importacoes.");
+    setMessage("Regra criada. Ela será aplicada nas próximas importações.");
   }
 
   return (
     <Shell>
       <div className="mx-auto max-w-5xl px-4 py-5 sm:py-6">
-        <header className="mb-5">
-          <h1 className="flex items-center gap-2 text-2xl font-bold"><FileUp size={24} /> Importar extrato</h1>
-          <p className="text-sm text-muted">Traga movimentacoes em CSV, revise e so depois salve.</p>
-        </header>
+        <PageHeader
+          description="Traga movimentações em CSV, revise e só depois salve."
+          icon={FileUp}
+          title="Importar extrato"
+        />
 
         {message ? <p className="app-card mb-4 p-3 text-sm">{message}</p> : null}
 
         <form onSubmit={handleUpload} className="app-card p-4">
           <SectionIntro
             title="Enviar arquivo"
-            description="Escolha um CSV do seu banco ou planilha. O app mostra uma previa antes de gravar qualquer movimentacao."
-            helpText="Depois do envio, confira quais colunas representam data, descricao e valor."
+            description="Escolha um CSV do seu banco ou planilha. O app mostra uma prévia antes de gravar qualquer movimentação."
+            helpText="Depois do envio, confira quais colunas representam data, descrição e valor."
           />
           <label className="block text-sm">
             Arquivo CSV
@@ -100,13 +102,13 @@ export default function ImportarPage() {
           <section className="app-card mt-4 p-4">
             <SectionIntro
               title="Mapeamento"
-              description="Diga qual coluna do CSV corresponde a cada informacao financeira."
-              helpText="A coluna Tipo e opcional. Se ela nao existir, o app tenta inferir por valor positivo ou negativo."
+              description="Diga qual coluna do CSV corresponde a cada informação financeira."
+              helpText="A coluna Tipo é opcional. Se ela não existir, o app tenta inferir por valor positivo ou negativo."
             />
             <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
               {(["date", "description", "value", "type"] as const).map((field) => (
                 <label key={field} className="text-sm">
-                  {field === "date" ? "Data" : field === "description" ? "Descricao" : field === "value" ? "Valor" : "Tipo"}
+                  {field === "date" ? "Data" : field === "description" ? "Descrição" : field === "value" ? "Valor" : "Tipo"}
                   <select className="field mt-1" value={mapping[field] || ""} onChange={(event) => setMapping({ ...mapping, [field]: event.target.value })} required={field !== "type"}>
                     <option value="">Selecione</option>
                     {columns.map((column) => <option key={column} value={column}>{column}</option>)}
@@ -115,8 +117,8 @@ export default function ImportarPage() {
               ))}
             </div>
             <div className="mt-4 flex flex-wrap gap-2">
-              <button className="btn-secondary" type="button" onClick={() => handlePreview().catch(console.error)} disabled={!mappingReady}>Ver previa</button>
-              <button className="btn-primary" type="button" onClick={() => handleConfirm().catch(console.error)} disabled={!preview}>Confirmar importacao</button>
+              <button className="btn-secondary" type="button" onClick={() => handlePreview().catch(console.error)} disabled={!mappingReady}>Ver prévia</button>
+              <button className="btn-primary" type="button" onClick={() => handleConfirm().catch(console.error)} disabled={!preview}>Confirmar importação</button>
             </div>
           </section>
         ) : null}
@@ -124,8 +126,8 @@ export default function ImportarPage() {
         {preview ? (
           <section className="app-card mt-4 p-4">
             <div className="flex flex-wrap justify-between gap-2">
-              <h2 className="font-semibold">Previa</h2>
-              <span className="text-sm text-muted">{preview.validRows} validas / {preview.invalidRows} erros</span>
+              <h2 className="font-semibold">Prévia</h2>
+              <span className="text-sm text-muted">{preview.validRows} válidas / {preview.invalidRows} erros</span>
             </div>
             <div className="mt-3 divide-y divide-line">
               {preview.preview.map((row) => (
@@ -143,9 +145,9 @@ export default function ImportarPage() {
         ) : upload ? (
           <div className="mt-4">
             <EmptyState
-              title="Previa ainda nao gerada"
-              description="Confira o mapeamento das colunas e clique em Ver previa para revisar as movimentacoes antes de importar."
-              actionLabel="Ver previa"
+              title="Prévia ainda não gerada"
+              description="Confira o mapeamento das colunas e clique em Ver prévia para revisar as movimentações antes de importar."
+              actionLabel="Ver prévia"
               onAction={() => handlePreview().catch(console.error)}
               icon={FileUp}
             />
@@ -154,9 +156,9 @@ export default function ImportarPage() {
 
         <form onSubmit={createRule} className="app-card mt-4 p-4">
           <SectionIntro
-            title="Regra de categorizacao"
-            description="Crie atalhos para o app classificar importacoes futuras automaticamente."
-            helpText="Exemplo: se a descricao tiver ifood, enviar para Alimentacao."
+            title="Regra de categorização"
+            description="Crie atalhos para o app classificar importações futuras automaticamente."
+            helpText="Exemplo: se a descrição tiver ifood, enviar para Alimentação."
             action={<Wand2 size={18} className="text-pulse" />}
           />
           <div className="mt-3 grid gap-3 md:grid-cols-[1fr_220px_180px_auto]">
@@ -168,8 +170,8 @@ export default function ImportarPage() {
             <select className="field" name="paymentMethod">
               <option value="csv_import">CSV</option>
               <option value="pix">Pix</option>
-              <option value="debito">Debito</option>
-              <option value="credito">Credito</option>
+              <option value="debito">Débito</option>
+              <option value="credito">Crédito</option>
             </select>
             <button className="btn-secondary" type="submit">Criar regra</button>
           </div>
