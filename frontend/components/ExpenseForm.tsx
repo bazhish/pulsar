@@ -152,7 +152,7 @@ export function ExpenseForm({
                   className={`p-2 rounded-app border-2 text-sm font-semibold transition ${
                     (form.installments ?? 1) === 1
                       ? "border-plum bg-plum/10 text-plum"
-                      : "border-line bg-white hover:bg-white/75"
+                      : "border-line bg-surface hover:bg-pulse/10"
                   }`}
                 >
                   À vista
@@ -163,7 +163,7 @@ export function ExpenseForm({
                   className={`p-2 rounded-app border-2 text-sm font-semibold transition ${
                     (form.installments ?? 1) > 1
                       ? "border-plum bg-plum/10 text-plum"
-                      : "border-line bg-white hover:bg-white/75"
+                      : "border-line bg-surface hover:bg-pulse/10"
                   }`}
                 >
                   Parcelado

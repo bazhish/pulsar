@@ -35,6 +35,7 @@ jobs:
           python-version: "3.12"
       - run: pip install -r requirements.txt
       - run: python -m ruff check .
+      - run: python -m bandit -r app -ll -q
       - name: Run tests
         env:
           DATABASE_URL: postgresql://ritmo:ritmo_test@localhost:5432/ritmo_test

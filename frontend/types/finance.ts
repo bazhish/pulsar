@@ -179,7 +179,22 @@ export type ReportSummary = {
   budget: BudgetSummary;
   cards: Card[];
   score: Score;
+  goals: Goal;
   paymentMethods: Array<{ payment_method: string; type: TransactionType; total: number }>;
+  categoryGrowth: {
+    month: string;
+    previousMonth: string;
+    hasHistory: boolean;
+    items: Array<{
+      name: string;
+      color: string;
+      currentTotal: number;
+      previousTotal: number;
+      delta: number;
+      percentChange: number | null;
+    }>;
+  };
+  alerts: Alert[];
 };
 
 export type CsvUpload = {
@@ -196,6 +211,15 @@ export type CsvPreview = {
   totalRows: number;
   validRows: number;
   invalidRows: number;
+  duplicateRows: number;
+  duplicates: Array<{
+    line: number;
+    transactionDate: string;
+    title: string;
+    amount: number;
+    type: TransactionType;
+    duplicateHash: string;
+  }>;
   preview: Array<{
     line: number;
     transactionDate: string;

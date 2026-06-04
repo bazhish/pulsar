@@ -39,6 +39,12 @@ function invalidateTokenCache(token?: string | null) {
   }
 }
 
+export function apiAssetUrl(value?: string | null) {
+  if (!value) return "";
+  if (value.startsWith("data:") || value.startsWith("http://") || value.startsWith("https://")) return value;
+  return `${API_BASE_URL}${value}`;
+}
+
 function withQuery(path: string, params: Record<string, string | number | undefined | null>) {
   const search = new URLSearchParams();
   Object.entries(params).forEach(([key, value]) => {
@@ -104,7 +110,25 @@ export type TransactionFilters = {
   search?: string;
 };
 
+export type OAuthProviderKey = "google" | "github" | "facebook";
+
+export type OAuthProviderStatus = {
+  enabled: boolean;
+  configured: boolean;
+  redirect_ready: boolean;
+};
+
+export type OAuthProvidersResponse = {
+  providers: Record<OAuthProviderKey, OAuthProviderStatus>;
+};
+
 export const api = {
+  oauthProviders() {
+    return request<OAuthProvidersResponse>("/api/auth/oauth/providers");
+  },
+  oauthAuthorizeUrl(provider: OAuthProviderKey) {
+    return `${API_BASE_URL}/api/auth/oauth/${provider}/authorize`;
+  },
   register(payload: { name: string; email: string; password: string }) {
     return request<{ access_token: string; token_type: string }>("/api/auth/register", {
       method: "POST",
@@ -124,6 +148,11 @@ export const api = {
   },
   updateProfile(token: string, payload: Partial<Pick<User, "name" | "avatar_url" | "send_monthly_summary">>) {
     return request<User>("/api/auth/me", { method: "PUT", token, body: JSON.stringify(payload) });
+  },
+  uploadProfilePhoto(token: string, file: File) {
+    const form = new FormData();
+    form.set("file", file);
+    return request<User>("/api/auth/me/avatar", { method: "POST", token, body: form });
   },
   changePassword(token: string, payload: { current_password: string; new_password: string }) {
     return request<{ ok: boolean }>("/api/auth/change-password", { method: "POST", token, body: JSON.stringify(payload) });

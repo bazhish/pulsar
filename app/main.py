@@ -19,9 +19,9 @@ from typing import Any, Literal, Optional
 from uuid import UUID
 
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Query, Request, UploadFile, status
+from fastapi import Cookie, Depends, FastAPI, File, Form, Header, HTTPException, Query, Request, UploadFile, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.security import OAuth2PasswordBearer
 from fastapi.staticfiles import StaticFiles
 from jose import JWTError, jwt
@@ -37,6 +37,15 @@ from starlette.responses import Response
 
 from migrate import run_migrations
 
+from app.oauth import (
+    OAUTH_STATE_COOKIE,
+    OAUTH_PROVIDERS,
+    build_authorize_redirect,
+    fetch_oauth_profile,
+    frontend_redirect,
+    list_providers,
+)
+
 load_dotenv()
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -50,12 +59,24 @@ PIN_MAX_ATTEMPTS = 3
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 HEX_COLOR_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
 CSV_IMPORT_MAX_BYTES = 1024 * 1024
+CSV_IMPORT_MAX_ROWS = 5000
 CSV_IMPORT_PREVIEW_LIMIT = 10
 CSV_IMPORT_ALLOWED_CONTENT_TYPES = {
     "text/csv",
     "application/csv",
     "application/vnd.ms-excel",
 }
+PROFILE_PHOTO_DIR = BASE_DIR / "data" / "profile-photos"
+PROFILE_PHOTO_URL_PREFIX = "/media/profile-photos"
+PROFILE_PHOTO_MAX_BYTES = 512 * 1024
+PROFILE_PHOTO_ALLOWED_CONTENT_TYPES = {
+    "image/jpeg": "jpg",
+    "image/png": "png",
+    "image/webp": "webp",
+}
+LOGIN_FAILURE_WINDOW_SECONDS = 15 * 60
+LOGIN_MAX_ATTEMPTS = 5
+CSV_FORMULA_PREFIXES = ("=", "+", "-", "@")
 
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
 LOG_FORMAT = os.getenv("LOG_FORMAT", "text")
@@ -120,7 +141,8 @@ db_pool: Optional[ThreadedConnectionPool] = None
 card_pin_failures: dict[str, dict[str, Any]] = {}
 card_unlock_sessions: dict[str, dict[str, Any]] = {}
 csv_import_sessions: dict[str, dict[str, Any]] = {}
-revoked_tokens: set[str] = set()
+login_failures: dict[str, dict[str, Any]] = {}
+revoked_token_hashes: set[str] = set()
 startup_time = time.time()
 
 # Used so login performs a bcrypt verification even when the email does not exist.
@@ -161,10 +183,12 @@ def parse_allowed_origins() -> list[str]:
 
 
 ALLOWED_ORIGINS = parse_allowed_origins()
+PROFILE_PHOTO_DIR.mkdir(parents=True, exist_ok=True)
 
 
-app = FastAPI(title="Ritmo Financeiro Pro", version="2.0.0")
+app = FastAPI(title="Pulsar API", version="2.0.0")
 app.state.limiter = limiter
+app.mount(PROFILE_PHOTO_URL_PREFIX, StaticFiles(directory=PROFILE_PHOTO_DIR), name="profile-photos")
 
 
 def rate_limit_handler(request: Request, exc: Exception) -> Response:
@@ -240,6 +264,11 @@ async def add_security_headers(request: Request, call_next):
     )
     response.headers["Cross-Origin-Opener-Policy"] = "same-origin"
     response.headers["Cross-Origin-Resource-Policy"] = "same-origin"
+    if request.url.path.startswith("/api/"):
+        response.headers["Cache-Control"] = "no-store"
+        response.headers["Pragma"] = "no-cache"
+    if is_production():
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     response.headers["Content-Security-Policy"] = (
         "default-src 'self'; "
         "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://fonts.googleapis.com; "
@@ -344,6 +373,14 @@ def decode_token_metadata(token: str) -> tuple[str | None, datetime | None]:
     if isinstance(exp, (int, float)):
         expires_at = datetime.fromtimestamp(exp, timezone.utc)
     return user_id, expires_at
+
+
+def as_utc_datetime(value: Any) -> datetime | None:
+    if not isinstance(value, datetime):
+        return None
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
 
 
 @app.on_event("startup")
@@ -499,13 +536,22 @@ def parse_csv_rows(content: bytes) -> tuple[list[str], list[dict[str, str]]]:
         raise HTTPException(status_code=400, detail="CSV sem cabeçalho.")
 
     rows: list[dict[str, str]] = []
-    for row in reader:
+    for index, row in enumerate(reader, start=1):
+        if index > CSV_IMPORT_MAX_ROWS:
+            raise HTTPException(status_code=400, detail=f"CSV excede o limite de {CSV_IMPORT_MAX_ROWS} linhas.")
         cleaned = {str(key or "").strip(): str(value or "").strip() for key, value in row.items() if key}
         if any(cleaned.values()):
             rows.append(cleaned)
     if not rows:
         raise HTTPException(status_code=400, detail="CSV sem linhas para importar.")
     return columns, rows
+
+
+def csv_safe_cell(value: Any) -> str:
+    text = str(value or "")
+    if text and text[0] in CSV_FORMULA_PREFIXES:
+        return f"'{text}"
+    return text
 
 
 def serialize_value(value: Any) -> Any:
@@ -561,6 +607,32 @@ def validate_optional_url(value: str | None, field_name: str) -> str | None:
     return cleaned
 
 
+def detect_profile_photo_extension(content_type: str | None, content: bytes) -> str:
+    normalized_type = (content_type or "").split(";")[0].strip().lower()
+    extension = PROFILE_PHOTO_ALLOWED_CONTENT_TYPES.get(normalized_type)
+    if not extension:
+        raise HTTPException(status_code=400, detail="Envie uma imagem JPG, PNG ou WebP.")
+
+    valid_signature = (
+        (extension == "jpg" and content.startswith(b"\xff\xd8\xff"))
+        or (extension == "png" and content.startswith(b"\x89PNG\r\n\x1a\n"))
+        or (extension == "webp" and len(content) >= 12 and content[:4] == b"RIFF" and content[8:12] == b"WEBP")
+    )
+    if not valid_signature:
+        raise HTTPException(status_code=400, detail="O arquivo enviado não parece ser uma imagem válida.")
+    return extension
+
+
+def delete_profile_photo_file(avatar_url: str | None) -> None:
+    if not avatar_url or not avatar_url.startswith(f"{PROFILE_PHOTO_URL_PREFIX}/"):
+        return
+    filename = avatar_url.rsplit("/", 1)[-1]
+    target = (PROFILE_PHOTO_DIR / filename).resolve()
+    if target.parent != PROFILE_PHOTO_DIR.resolve():
+        return
+    target.unlink(missing_ok=True)
+
+
 def validate_date_text(value: str, field_name: str) -> str:
     cleaned = clean_text(value, field_name, 10)
     try:
@@ -609,6 +681,121 @@ def verify_password(password: str, hashed_password: str) -> bool:
     return bool(password_context.verify(password, hashed_password))
 
 
+def login_failure_key(email: str) -> str:
+    return email_hash(email.strip().lower())
+
+
+def enforce_login_rate_limit(email: str) -> None:
+    key = login_failure_key(email)
+    now_dt = datetime.now(timezone.utc)
+    now = now_dt.timestamp()
+    if storage_available():
+        try:
+            with db_cursor(commit=True) as cursor:
+                cursor.execute(
+                    """
+                    SELECT attempts, first_attempt_at, blocked_until
+                    FROM login_failures_state
+                    WHERE identifier_hash = %s
+                    """,
+                    (key,),
+                )
+                row = normalize_row(cursor.fetchone())
+                if not row:
+                    return
+
+                blocked_until = as_utc_datetime(row.get("blocked_until"))
+                if blocked_until and blocked_until > now_dt:
+                    audit_log("login_rate_limited", None, {"email_hash": key})
+                    raise HTTPException(status_code=429, detail="Muitas tentativas. Tente novamente em alguns minutos.")
+
+                first_attempt = as_utc_datetime(row.get("first_attempt_at"))
+                if first_attempt and (now_dt - first_attempt).total_seconds() > LOGIN_FAILURE_WINDOW_SECONDS:
+                    cursor.execute("DELETE FROM login_failures_state WHERE identifier_hash = %s", (key,))
+                    return
+        except HTTPException:
+            raise
+        except Exception:
+            logger.exception("Failed to read login failure state")
+
+    entry = login_failures.get(key)
+    if not entry:
+        return
+    blocked_until = float(entry.get("blocked_until") or 0)
+    if blocked_until > now:
+        audit_log("login_rate_limited", None, {"email_hash": key})
+        raise HTTPException(status_code=429, detail="Muitas tentativas. Tente novamente em alguns minutos.")
+    first_attempt = float(entry.get("first_attempt") or 0)
+    if now - first_attempt > LOGIN_FAILURE_WINDOW_SECONDS:
+        login_failures.pop(key, None)
+
+
+def record_login_failure(email: str) -> None:
+    key = login_failure_key(email)
+    now_dt = datetime.now(timezone.utc)
+    now = now_dt.timestamp()
+    if storage_available():
+        try:
+            blocked_until_dt = None
+            with db_cursor(commit=True) as cursor:
+                cursor.execute(
+                    """
+                    SELECT attempts, first_attempt_at
+                    FROM login_failures_state
+                    WHERE identifier_hash = %s
+                    """,
+                    (key,),
+                )
+                row = normalize_row(cursor.fetchone())
+                first_attempt = as_utc_datetime(row.get("first_attempt_at")) if row else None
+                if not row or not first_attempt or (now_dt - first_attempt).total_seconds() > LOGIN_FAILURE_WINDOW_SECONDS:
+                    attempts = 1
+                    first_attempt_at = now_dt
+                else:
+                    attempts = int(row["attempts"]) + 1
+                    first_attempt_at = first_attempt
+
+                if attempts >= LOGIN_MAX_ATTEMPTS:
+                    blocked_until_dt = now_dt + timedelta(seconds=LOGIN_FAILURE_WINDOW_SECONDS)
+
+                cursor.execute(
+                    """
+                    INSERT INTO login_failures_state
+                      (identifier_hash, attempts, first_attempt_at, blocked_until)
+                    VALUES (%s, %s, %s, %s)
+                    ON CONFLICT (identifier_hash)
+                    DO UPDATE SET
+                      attempts = EXCLUDED.attempts,
+                      first_attempt_at = EXCLUDED.first_attempt_at,
+                      blocked_until = EXCLUDED.blocked_until
+                    """,
+                    (key, attempts, first_attempt_at, blocked_until_dt),
+                )
+            return
+        except Exception:
+            logger.exception("Failed to persist login failure state")
+
+    entry = login_failures.get(key)
+    if not entry or now - float(entry.get("first_attempt") or 0) > LOGIN_FAILURE_WINDOW_SECONDS:
+        entry = {"count": 0, "first_attempt": now, "blocked_until": 0}
+    entry["count"] = int(entry["count"]) + 1
+    if int(entry["count"]) >= LOGIN_MAX_ATTEMPTS:
+        entry["blocked_until"] = now + LOGIN_FAILURE_WINDOW_SECONDS
+    login_failures[key] = entry
+
+
+def clear_login_failures(email: str) -> None:
+    key = login_failure_key(email)
+    login_failures.pop(key, None)
+    if not storage_available():
+        return
+    try:
+        with db_cursor(commit=True) as cursor:
+            cursor.execute("DELETE FROM login_failures_state WHERE identifier_hash = %s", (key,))
+    except Exception:
+        logger.exception("Failed to clear login failure state")
+
+
 def validate_pin(pin: str) -> str:
     cleaned = pin.strip()
     if not cleaned.isdigit() or not 4 <= len(cleaned) <= 6:
@@ -625,13 +812,15 @@ def verify_pin(pin: str, pin_hash: str) -> bool:
 
 
 def create_access_token(user_id: str) -> str:
-    expires_at = datetime.now(timezone.utc) + timedelta(hours=ACCESS_TOKEN_EXPIRE_HOURS)
-    payload = {"sub": str(user_id), "exp": int(expires_at.timestamp())}
+    issued_at = datetime.now(timezone.utc)
+    expires_at = issued_at + timedelta(hours=ACCESS_TOKEN_EXPIRE_HOURS)
+    payload = {"sub": str(user_id), "iat": int(issued_at.timestamp()), "exp": int(expires_at.timestamp())}
     return jwt.encode(payload, get_jwt_secret(), algorithm=JWT_ALGORITHM)
 
 
 def revoke_token(token: str, user_id: str | None = None) -> None:
-    revoked_tokens.add(token)
+    current_hash = token_hash(token)
+    revoked_token_hashes.add(current_hash)
     if not storage_available():
         return
     decoded_user_id, expires_at = decode_token_metadata(token)
@@ -644,14 +833,15 @@ def revoke_token(token: str, user_id: str | None = None) -> None:
                 ON CONFLICT (token_hash)
                 DO UPDATE SET revoked_at = NOW(), expires_at = EXCLUDED.expires_at
                 """,
-                (token_hash(token), user_id or decoded_user_id, expires_at),
+                (current_hash, user_id or decoded_user_id, expires_at),
             )
     except Exception:
         logger.exception("Failed to persist revoked token")
 
 
 def is_token_revoked(token: str) -> bool:
-    if token in revoked_tokens:
+    current_hash = token_hash(token)
+    if current_hash in revoked_token_hashes:
         return True
     if not storage_available():
         return False
@@ -665,7 +855,7 @@ def is_token_revoked(token: str) -> bool:
                   AND (expires_at IS NULL OR expires_at > NOW())
                 LIMIT 1
                 """,
-                (token_hash(token),),
+                (current_hash,),
             )
             return cursor.fetchone() is not None
     except Exception:
@@ -690,7 +880,8 @@ def get_user_by_email(email: str) -> Optional[dict]:
     with db_cursor() as cursor:
         cursor.execute(
             """
-            SELECT id, email, hashed_password, name, avatar_url, send_monthly_summary, is_active, created_at, updated_at
+            SELECT id, email, hashed_password, name, avatar_url, send_monthly_summary, is_active,
+                   auth_provider, oauth_subject, password_changed_at, created_at, updated_at
             FROM users
             WHERE email = %s
             """,
@@ -699,17 +890,92 @@ def get_user_by_email(email: str) -> Optional[dict]:
         return normalize_row(cursor.fetchone())
 
 
+def get_user_by_oauth(provider: str, subject: str) -> Optional[dict]:
+    with db_cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT id, email, hashed_password, name, avatar_url, send_monthly_summary, is_active,
+                   auth_provider, oauth_subject, password_changed_at, created_at, updated_at
+            FROM users
+            WHERE auth_provider = %s AND oauth_subject = %s
+            """,
+            (provider, subject),
+        )
+        return normalize_row(cursor.fetchone())
+
+
 def get_user_by_id(user_id: str) -> Optional[dict]:
     with db_cursor() as cursor:
         cursor.execute(
             """
-            SELECT id, email, hashed_password, name, avatar_url, send_monthly_summary, is_active, created_at, updated_at
+            SELECT id, email, hashed_password, name, avatar_url, send_monthly_summary, is_active,
+                   auth_provider, oauth_subject, password_changed_at, created_at, updated_at
             FROM users
             WHERE id = %s
             """,
             (user_id,),
         )
         return normalize_row(cursor.fetchone())
+
+
+def oauth_only_password_hash() -> str:
+    return hash_password(secrets.token_urlsafe(48))
+
+
+def resolve_oauth_user(profile: dict[str, str]) -> dict:
+    provider = profile["provider"]
+    subject = profile["subject"]
+    email = normalize_email(profile["email"])
+    name = clean_text(profile.get("name") or email.split("@")[0], "Nome", 100)
+
+    existing_oauth = get_user_by_oauth(provider, subject)
+    if existing_oauth:
+        if not existing_oauth["is_active"]:
+            raise HTTPException(status_code=403, detail="Conta desativada.")
+        return existing_oauth
+
+    by_email = get_user_by_email(email)
+    if by_email:
+        if not by_email["is_active"]:
+            raise HTTPException(status_code=403, detail="Conta desativada.")
+        if by_email.get("oauth_subject") and (
+            by_email.get("auth_provider") != provider or str(by_email.get("oauth_subject")) != subject
+        ):
+            raise HTTPException(status_code=409, detail="E-mail já vinculado a outro provedor social.")
+        with db_cursor(commit=True) as cursor:
+            cursor.execute(
+                """
+                UPDATE users
+                SET auth_provider = %s, oauth_subject = %s, name = COALESCE(NULLIF(name, ''), %s)
+                WHERE id = %s
+                RETURNING id, email, hashed_password, name, avatar_url, send_monthly_summary, is_active,
+                          auth_provider, oauth_subject, password_changed_at, created_at, updated_at
+                """,
+                (provider, subject, name, by_email["id"]),
+            )
+            return require_row(normalize_row(cursor.fetchone()), "Usuário não encontrado.")
+
+    try:
+        with db_cursor(commit=True) as cursor:
+            cursor.execute(
+                """
+                INSERT INTO users (email, hashed_password, name, auth_provider, oauth_subject)
+                VALUES (%s, %s, %s, %s, %s)
+                RETURNING id, email, hashed_password, name, avatar_url, send_monthly_summary, is_active,
+                          auth_provider, oauth_subject, password_changed_at, created_at, updated_at
+                """,
+                (email, oauth_only_password_hash(), name, provider, subject),
+            )
+            user = require_row(normalize_row(cursor.fetchone()), "Usuário não criado.")
+            ensure_user_defaults_for_cursor(cursor, user["id"])
+    except errors.UniqueViolation:
+        linked = get_user_by_oauth(provider, subject) or get_user_by_email(email)
+        if linked:
+            return linked
+        raise HTTPException(status_code=409, detail="Não foi possível vincular conta social.")
+
+    audit_log("user_registered_oauth", str(user["id"]), {"provider": provider, "email_hash": email_hash(email)})
+    return user
 
 
 def ensure_user_defaults_for_cursor(cursor, user_id: str) -> None:
@@ -750,12 +1016,20 @@ def get_current_user(token: str = Depends(oauth2_scheme)) -> dict:
         if not subject:
             raise credentials_error
         user_uuid = UUID(str(subject))
+        issued_at_claim = payload.get("iat")
     except (JWTError, ValueError):
         raise credentials_error
 
     user = get_user_by_id(str(user_uuid))
     if not user or not user["is_active"]:
         raise credentials_error
+    password_changed_at = as_utc_datetime(user.get("password_changed_at"))
+    if password_changed_at:
+        if not isinstance(issued_at_claim, (int, float)):
+            raise credentials_error
+        issued_at = datetime.fromtimestamp(float(issued_at_claim), timezone.utc)
+        if issued_at < password_changed_at:
+            raise credentials_error
     return public_user(user)
 
 
@@ -1806,6 +2080,9 @@ def get_reports_summary(user_id: str, month: str) -> dict:
     budget = get_budget_summary(user_id, month_key)
     cards = get_cards_summary(user_id, month_key)
     score_data = calculate_score(user_id, month_key)
+    goals = get_goals(user_id, month_key)
+    category_growth = get_category_growth(user_id, month_key)
+    alerts = get_alerts_for_month(user_id, month_key)
     with db_cursor() as cursor:
         cursor.execute(
             """
@@ -1825,13 +2102,111 @@ def get_reports_summary(user_id: str, month: str) -> dict:
         "budget": budget,
         "cards": cards,
         "score": score_data,
+        "goals": goals,
         "paymentMethods": payment_methods,
+        "categoryGrowth": category_growth,
+        "alerts": alerts,
+    }
+
+
+def get_category_growth(user_id: str, month: str) -> dict:
+    previous_month = add_months(month, -1)
+    with db_cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT
+              COALESCE(c.name, 'Sem categoria') AS name,
+              COALESCE(c.color, '#14B8A6') AS color,
+              COALESCE(SUM(t.amount), 0) AS total
+            FROM transactions t
+            LEFT JOIN categories c ON c.id = t.category_id AND c.user_id = t.user_id
+            WHERE t.user_id = %s
+              AND t.type = 'expense'
+              AND COALESCE(t.billing_month, substring(t.transaction_date from 1 for 7)) = %s
+            GROUP BY c.name, c.color
+            """,
+            (user_id, month),
+        )
+        current_rows = normalize_rows(cursor.fetchall())
+
+        cursor.execute(
+            """
+            SELECT
+              COALESCE(c.name, 'Sem categoria') AS name,
+              COALESCE(c.color, '#14B8A6') AS color,
+              COALESCE(SUM(t.amount), 0) AS total
+            FROM transactions t
+            LEFT JOIN categories c ON c.id = t.category_id AND c.user_id = t.user_id
+            WHERE t.user_id = %s
+              AND t.type = 'expense'
+              AND COALESCE(t.billing_month, substring(t.transaction_date from 1 for 7)) = %s
+            GROUP BY c.name, c.color
+            """,
+            (user_id, previous_month),
+        )
+        previous_rows = normalize_rows(cursor.fetchall())
+
+    current_by_name = {row["name"]: row for row in current_rows}
+    previous_by_name = {row["name"]: row for row in previous_rows}
+    names = sorted(set(current_by_name) | set(previous_by_name))
+    items = []
+    for name in names:
+        current_total = round_money(current_by_name.get(name, {}).get("total") or 0)
+        previous_total = round_money(previous_by_name.get(name, {}).get("total") or 0)
+        delta = round_money(current_total - previous_total)
+        percent_change = None
+        if previous_total > 0:
+            percent_change = round_money((delta / previous_total) * Decimal("100"))
+        color = current_by_name.get(name, previous_by_name.get(name, {})).get("color") or "#14B8A6"
+        items.append(
+            {
+                "name": name,
+                "color": color,
+                "currentTotal": current_total,
+                "previousTotal": previous_total,
+                "delta": delta,
+                "percentChange": percent_change,
+            }
+        )
+
+    items.sort(key=lambda item: abs(to_decimal(item["delta"])), reverse=True)
+    return {
+        "month": month,
+        "previousMonth": previous_month,
+        "hasHistory": any(round_money(row.get("total") or 0) > 0 for row in previous_rows),
+        "items": items,
     }
 
 
 def format_brl(value: Any) -> str:
     formatted = f"{round_money(value):,.2f}"
     return "R$ " + formatted.replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+def payment_method_label(value: Any) -> str:
+    labels = {
+        "boleto": "Boleto",
+        "cash": "Dinheiro",
+        "credito": "Crédito",
+        "credit": "Crédito",
+        "debito": "Débito",
+        "debit": "Débito",
+        "dinheiro": "Dinheiro",
+        "pix": "Pix",
+        "transfer": "Transferência",
+    }
+    text = str(value or "").strip()
+    return labels.get(text, text or "Outro")
+
+
+def transaction_source_label(value: Any) -> str:
+    labels = {
+        "manual": "Manual",
+        "csv_import": "Importação CSV",
+        "open_finance_future": "Open Finance",
+    }
+    text = str(value or "").strip()
+    return labels.get(text, text or "Manual")
 
 
 def get_month_totals(user_id: str, month: str) -> dict:
@@ -2471,6 +2846,7 @@ def build_csv_import_preview(user_id: str, session: dict, mapping: CsvColumnMapp
 
     parsed_rows: list[dict] = []
     errors_list: list[dict] = []
+    duplicate_rows: list[dict] = []
     for index, row in enumerate(session["rows"], start=1):
         try:
             transaction_date = parse_import_date(row.get(mapping.date))
@@ -2496,12 +2872,28 @@ def build_csv_import_preview(user_id: str, session: dict, mapping: CsvColumnMapp
             detail = exc.detail if isinstance(exc, HTTPException) else str(exc)
             errors_list.append({"line": index, "detail": detail})
 
+    if parsed_rows:
+        duplicate_hashes = [row["duplicateHash"] for row in parsed_rows]
+        with db_cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT duplicate_hash
+                FROM transactions
+                WHERE user_id = %s AND duplicate_hash = ANY(%s)
+                """,
+                (user_id, duplicate_hashes),
+            )
+            existing_hashes = {row["duplicate_hash"] for row in normalize_rows(cursor.fetchall())}
+        duplicate_rows = [row for row in parsed_rows if row["duplicateHash"] in existing_hashes]
+
     return {
         "importToken": session["token"],
         "columns": session["columns"],
         "totalRows": len(session["rows"]),
         "validRows": len(parsed_rows),
         "invalidRows": len(errors_list),
+        "duplicateRows": len(duplicate_rows),
+        "duplicates": duplicate_rows[:CSV_IMPORT_PREVIEW_LIMIT],
         "preview": parsed_rows[:CSV_IMPORT_PREVIEW_LIMIT],
         "errors": errors_list[:CSV_IMPORT_PREVIEW_LIMIT],
         "rows": parsed_rows,
@@ -2561,7 +2953,8 @@ def register(request: Request, payload: RegisterPayload) -> dict:
                 """
                 INSERT INTO users (email, hashed_password, name)
                 VALUES (%s, %s, %s)
-                RETURNING id, email, name, avatar_url, send_monthly_summary, is_active, created_at, updated_at
+                RETURNING id, email, name, avatar_url, send_monthly_summary, is_active,
+                          auth_provider, oauth_subject, password_changed_at, created_at, updated_at
                 """,
                 (email, hash_password(payload.password), name),
             )
@@ -2575,6 +2968,52 @@ def register(request: Request, payload: RegisterPayload) -> dict:
     return {"access_token": create_access_token(user["id"]), "token_type": "bearer"}  # nosec B105
 
 
+@app.get("/api/auth/oauth/providers")
+def oauth_providers() -> dict:
+    return {"providers": list_providers()}
+
+
+@app.get("/api/auth/oauth/{provider}/authorize")
+def oauth_authorize(provider: str) -> RedirectResponse:
+    if provider not in OAUTH_PROVIDERS:
+        raise HTTPException(status_code=404, detail="Provedor OAuth não suportado.")
+    return build_authorize_redirect(provider)
+
+
+@app.get("/api/auth/oauth/{provider}/callback")
+def oauth_callback(
+    provider: str,
+    code: str | None = None,
+    state: str | None = None,
+    error: str | None = None,
+    error_description: str | None = None,
+    oauth_state_cookie: str | None = Cookie(default=None, alias=OAUTH_STATE_COOKIE),
+) -> RedirectResponse:
+    def redirect_and_clear(*, access_token: str | None = None, error_message: str | None = None) -> RedirectResponse:
+        response = frontend_redirect(access_token=access_token, error=error_message)
+        response.delete_cookie(OAUTH_STATE_COOKIE, path="/api/auth/oauth")
+        return response
+
+    if provider not in OAUTH_PROVIDERS:
+        return redirect_and_clear(error_message="unsupported_provider")
+    if error:
+        logger.info("OAuth provider error provider=%s error=%s", provider, error)
+        return redirect_and_clear(error_message=error_description or error)
+    if not code or not state:
+        return redirect_and_clear(error_message="missing_code")
+    try:
+        profile = fetch_oauth_profile(provider, code, state, oauth_state_cookie)
+        user = resolve_oauth_user(profile)
+        audit_log("login_success_oauth", str(user["id"]), {"provider": provider, "email_hash": email_hash(user["email"])})
+        return redirect_and_clear(access_token=create_access_token(user["id"]))
+    except HTTPException as exc:
+        logger.info("OAuth callback failed provider=%s detail=%s", provider, exc.detail)
+        return redirect_and_clear(error_message=str(exc.detail))
+    except Exception:
+        logger.exception("OAuth callback unexpected failure provider=%s", provider)
+        return redirect_and_clear(error_message="oauth_failed")
+
+
 @app.post("/api/auth/login")
 @limiter.limit("5 per 15 minutes")
 def login(
@@ -2583,15 +3022,19 @@ def login(
     password: str = Form(..., max_length=72),
 ) -> dict:
     email_value = email.strip().lower()
+    enforce_login_rate_limit(email_value)
     email_is_valid = len(email_value) <= 255 and bool(EMAIL_RE.match(email_value))
     user = get_user_by_email(email_value) if email_is_valid else None
-    hash_to_check = user["hashed_password"] if user else DUMMY_PASSWORD_HASH
+    stored_hash = user["hashed_password"] if user else None
+    hash_to_check = stored_hash if stored_hash else DUMMY_PASSWORD_HASH
     password_ok = verify_password(password, hash_to_check)
 
     if not user or not password_ok or not user["is_active"]:
+        record_login_failure(email_value)
         audit_log("login_failed", str(user["id"]) if user else None, {"email_hash": email_hash(email_value)})
         raise HTTPException(status_code=401, detail="E-mail ou senha inv\u00e1lidos.")
 
+    clear_login_failures(email_value)
     audit_log("login_success", str(user["id"]), {"email_hash": email_hash(email_value)})
     return {"access_token": create_access_token(user["id"]), "token_type": "bearer"}  # nosec B105
 
@@ -2615,7 +3058,8 @@ def save_profile_payload(payload: ProfilePayload, current_user: dict) -> dict:
     user_id = current_user["id"]
     fields_set = getattr(payload, "model_fields_set", getattr(payload, "__fields_set__", set()))
     name = current_user["name"]
-    avatar_url = current_user.get("avatar_url")
+    previous_avatar_url = current_user.get("avatar_url")
+    avatar_url = previous_avatar_url
     send_monthly_summary = bool(current_user.get("send_monthly_summary", False))
 
     if "name" in fields_set:
@@ -2637,11 +3081,56 @@ def save_profile_payload(payload: ProfilePayload, current_user: dict) -> dict:
             UPDATE users
             SET name = %s, avatar_url = %s, send_monthly_summary = %s
             WHERE id = %s
-            RETURNING id, email, hashed_password, name, avatar_url, send_monthly_summary, is_active, created_at, updated_at
+            RETURNING id, email, hashed_password, name, avatar_url, send_monthly_summary, is_active,
+                      auth_provider, oauth_subject, password_changed_at, created_at, updated_at
             """,
             (name, avatar_url, send_monthly_summary, user_id),
         )
         user = require_row(normalize_row(cursor.fetchone()), "Usu\u00e1rio n\u00e3o atualizado.")
+    if "avatar_url" in fields_set and avatar_url is None:
+        delete_profile_photo_file(previous_avatar_url)
+    return public_user(user)
+
+
+@app.post("/api/auth/me/avatar")
+@limiter.limit("12 per 1 hour")
+async def upload_profile_photo(
+    request: Request,
+    file: UploadFile = File(...),
+    current_user: dict = Depends(get_current_user),
+) -> dict:
+    content = await file.read(PROFILE_PHOTO_MAX_BYTES + 1)
+    if not content:
+        raise HTTPException(status_code=400, detail="Escolha uma imagem para enviar.")
+    if len(content) > PROFILE_PHOTO_MAX_BYTES:
+        raise HTTPException(status_code=400, detail="A foto deve ter no máximo 512 KB.")
+
+    extension = detect_profile_photo_extension(file.content_type, content)
+    user_id = str(current_user["id"])
+    filename = f"{user_id}-{secrets.token_hex(8)}.{extension}"
+    target = (PROFILE_PHOTO_DIR / filename).resolve()
+    if target.parent != PROFILE_PHOTO_DIR.resolve():
+        raise HTTPException(status_code=400, detail="Nome de arquivo inválido.")
+
+    target.write_bytes(content)
+    avatar_url = f"{PROFILE_PHOTO_URL_PREFIX}/{filename}"
+    previous_avatar_url = current_user.get("avatar_url")
+
+    with db_cursor(commit=True) as cursor:
+        cursor.execute(
+            """
+            UPDATE users
+            SET avatar_url = %s
+            WHERE id = %s
+            RETURNING id, email, hashed_password, name, avatar_url, send_monthly_summary, is_active,
+                      auth_provider, oauth_subject, password_changed_at, created_at, updated_at
+            """,
+            (avatar_url, user_id),
+        )
+        user = require_row(normalize_row(cursor.fetchone()), "Foto de perfil não atualizada.")
+
+    delete_profile_photo_file(previous_avatar_url)
+    audit_log("profile_photo_uploaded", user_id)
     return public_user(user)
 
 
@@ -2653,7 +3142,7 @@ def change_password(
     current_user: dict = Depends(get_current_user),
 ) -> dict:
     user = get_user_by_id(current_user["id"])
-    if not user or not verify_password(payload.current_password, user["hashed_password"]):
+    if not user or not user.get("hashed_password") or not verify_password(payload.current_password, user["hashed_password"]):
         raise HTTPException(status_code=400, detail="Senha atual incorreta.")
 
     validate_password_strength(payload.new_password)
@@ -2661,7 +3150,7 @@ def change_password(
         cursor.execute(
             """
             UPDATE users
-            SET hashed_password = %s
+            SET hashed_password = %s, password_changed_at = date_trunc('second', NOW())
             WHERE id = %s
             """,
             (hash_password(payload.new_password), current_user["id"]),
@@ -3364,7 +3853,8 @@ def get_export_transactions(user_id: str, month_key: str) -> list[dict]:
         cursor.execute(
             """
             SELECT t.transaction_date, t.title, c.name AS category_name, t.type, t.amount,
-                   t.payment_method, cards.name AS card_name, t.installment_number, t.total_installments
+                   t.payment_method, t.source, t.notes, cards.name AS card_name,
+                   t.installment_number, t.total_installments
             FROM transactions t
             LEFT JOIN categories c ON c.id = t.category_id AND c.user_id = t.user_id
             LEFT JOIN cards ON cards.id = t.card_id AND cards.user_id = t.user_id
@@ -3386,31 +3876,171 @@ def export_csv(request: Request, month: Optional[str] = None, current_user: dict
 
     output = io.StringIO()
     writer = csv.writer(output, delimiter=";")
-    writer.writerow(["data", "titulo", "categoria", "tipo", "valor", "forma_pagamento", "cart\u00e3o", "parcela"])
+    writer.writerow(
+        [
+            "Data",
+            "Tipo",
+            "Nome",
+            "Categoria",
+            "Forma de pagamento",
+            "Valor",
+            "Origem",
+            "Observa\u00e7\u00f5es",
+            "Parcela",
+        ]
+    )
     for row in rows:
         installment = ""
         if row.get("total_installments"):
             installment = f"{row.get('installment_number')}/{row.get('total_installments')}"
+        transaction_type = "Entrada" if row.get("type") == "income" else "Despesa"
         writer.writerow(
             [
                 row.get("transaction_date") or "",
-                row.get("title") or "",
-                row.get("category_name") or "",
-                row.get("type") or "",
-                f"{round_money(row.get('amount') or 0):.2f}",
-                row.get("payment_method") or "",
-                row.get("card_name") or "",
-                installment,
+                transaction_type,
+                csv_safe_cell(row.get("title")),
+                csv_safe_cell(row.get("category_name")),
+                csv_safe_cell(payment_method_label(row.get("payment_method"))),
+                f"{round_money(row.get('amount') or 0):.2f}".replace(".", ","),
+                csv_safe_cell(transaction_source_label(row.get("source"))),
+                csv_safe_cell(row.get("notes")),
+                csv_safe_cell(installment),
             ]
         )
 
-    headers = {"Content-Disposition": f'attachment; filename="financeiro-{month_key}.csv"'}
+    headers = {
+        "Content-Disposition": f'attachment; filename="pulsar-relatorio-{month_key}.csv"',
+        "Cache-Control": "no-store",
+        "Pragma": "no-cache",
+    }
     return Response(content="\ufeff" + output.getvalue(), media_type="text/csv; charset=utf-8", headers=headers)
 
 
 def pdf_escape(value: Any) -> str:
     text = str(value or "").encode("latin-1", "replace").decode("latin-1")
     return text.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
+
+
+def pdf_color(hex_color: str) -> tuple[float, float, float]:
+    cleaned = str(hex_color or "#102033").strip().lstrip("#")
+    if len(cleaned) != 6:
+        cleaned = "102033"
+    try:
+        red = int(cleaned[0:2], 16) / 255
+        green = int(cleaned[2:4], 16) / 255
+        blue = int(cleaned[4:6], 16) / 255
+    except ValueError:
+        red, green, blue = pdf_color("#102033")
+    return red, green, blue
+
+
+def pdf_color_command(hex_color: str, mode: str) -> str:
+    red, green, blue = pdf_color(hex_color)
+    return f"{red:.3f} {green:.3f} {blue:.3f} {mode}"
+
+
+class PdfReport:
+    width = 595
+    height = 842
+    margin = 36
+
+    def __init__(self) -> None:
+        self.pages: list[list[str]] = [[]]
+        self.y = self.margin
+
+    @property
+    def commands(self) -> list[str]:
+        return self.pages[-1]
+
+    def add_page(self) -> None:
+        self.pages.append([])
+        self.y = self.margin
+
+    def ensure_space(self, height: float) -> None:
+        if self.y + height > self.height - 58:
+            self.add_page()
+
+    def rect(self, x: float, y: float, width: float, height: float, fill: str = "#FFFFFF", stroke: str | None = None) -> None:
+        y_pdf = self.height - y - height
+        operator = "B" if stroke else "f"
+        if fill:
+            self.commands.append(pdf_color_command(fill, "rg"))
+        if stroke:
+            self.commands.append(pdf_color_command(stroke, "RG"))
+        self.commands.append(f"{x:.1f} {y_pdf:.1f} {width:.1f} {height:.1f} re {operator}")
+
+    def line(self, x1: float, y1: float, x2: float, y2: float, color: str = "#DDE7F0", width: float = 1) -> None:
+        self.commands.append(pdf_color_command(color, "RG"))
+        self.commands.append(f"{width:.1f} w {x1:.1f} {self.height - y1:.1f} m {x2:.1f} {self.height - y2:.1f} l S")
+
+    def text(self, x: float, y: float, text: Any, size: int = 10, color: str = "#102033", bold: bool = False) -> None:
+        font = "F2" if bold else "F1"
+        self.commands.append(pdf_color_command(color, "rg"))
+        self.commands.append(f"BT /{font} {size} Tf {x:.1f} {self.height - y:.1f} Td ({pdf_escape(text)}) Tj ET")
+
+    def wrapped_text(self, x: float, y: float, text: str, max_chars: int, size: int = 9, color: str = "#102033") -> float:
+        lines = wrap_pdf_line(text, max_chars)
+        for index, line in enumerate(lines):
+            self.text(x, y + index * (size + 3), line, size=size, color=color)
+        return y + len(lines) * (size + 3)
+
+    def build(self) -> bytes:
+        for index, commands in enumerate(self.pages, start=1):
+            commands.append(pdf_color_command("#DDE7F0", "RG"))
+            commands.append(
+                f"1.0 w {self.margin:.1f} 42.0 m {self.width - self.margin:.1f} 42.0 l S"
+            )
+            commands.append(pdf_color_command("#6D7B8D", "rg"))
+            commands.append(f"BT /F2 9 Tf {self.margin:.1f} 24.0 Td (Pulsar) Tj ET")
+            commands.append(
+                f"BT /F1 9 Tf {self.width - 96:.1f} 24.0 Td ({pdf_escape(f'Página {index}')}) Tj ET"
+            )
+
+        page_count = len(self.pages)
+        font_regular_id = 3 + page_count * 2
+        font_bold_id = font_regular_id + 1
+        objects: dict[int, bytes] = {
+            1: b"<< /Type /Catalog /Pages 2 0 R >>",
+            font_regular_id: b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>",
+            font_bold_id: b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>",
+        }
+
+        page_ids: list[int] = []
+        for index, commands in enumerate(self.pages):
+            page_id = 3 + index * 2
+            content_id = page_id + 1
+            page_ids.append(page_id)
+            stream = "\n".join(commands).encode("latin-1", "replace")
+            objects[content_id] = (
+                f"<< /Length {len(stream)} >>\nstream\n".encode("ascii")
+                + stream
+                + b"\nendstream"
+            )
+            objects[page_id] = (
+                f"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {self.width} {self.height}] "
+                f"/Resources << /Font << /F1 {font_regular_id} 0 R /F2 {font_bold_id} 0 R >> >> "
+                f"/Contents {content_id} 0 R >>"
+            ).encode("ascii")
+
+        kids = " ".join(f"{page_id} 0 R" for page_id in page_ids)
+        objects[2] = f"<< /Type /Pages /Kids [{kids}] /Count {page_count} >>".encode("ascii")
+
+        pdf = b"%PDF-1.4\n"
+        offsets = [0]
+        for object_id in range(1, max(objects) + 1):
+            offsets.append(len(pdf))
+            pdf += f"{object_id} 0 obj\n".encode("ascii") + objects[object_id] + b"\nendobj\n"
+
+        xref_offset = len(pdf)
+        pdf += f"xref\n0 {len(offsets)}\n".encode("ascii")
+        pdf += b"0000000000 65535 f \n"
+        for offset in offsets[1:]:
+            pdf += f"{offset:010d} 00000 n \n".encode("ascii")
+        pdf += (
+            f"trailer\n<< /Size {len(offsets)} /Root 1 0 R >>\n"
+            f"startxref\n{xref_offset}\n%%EOF\n"
+        ).encode("ascii")
+        return pdf
 
 
 def wrap_pdf_line(line: str, max_length: int = 92) -> list[str]:
@@ -3494,51 +4124,237 @@ def build_basic_pdf(lines: list[str]) -> bytes:
     return pdf
 
 
+def truncate_pdf_text(value: Any, max_length: int) -> str:
+    text = str(value or "")
+    return text if len(text) <= max_length else text[: max_length - 1] + "…"
+
+
+def add_pdf_section(pdf: PdfReport, title: str, description: str | None = None) -> None:
+    pdf.ensure_space(42)
+    pdf.text(pdf.margin, pdf.y, title, size=14, color="#102033", bold=True)
+    pdf.y += 16
+    if description:
+        pdf.text(pdf.margin, pdf.y, description, size=9, color="#6D7B8D")
+        pdf.y += 14
+    pdf.line(pdf.margin, pdf.y, pdf.width - pdf.margin, pdf.y, "#DDE7F0")
+    pdf.y += 14
+
+
+def add_pdf_summary_cards(pdf: PdfReport, cards: list[tuple[str, str, str]]) -> None:
+    card_gap = 8
+    card_width = (pdf.width - pdf.margin * 2 - card_gap * 4) / 5
+    card_height = 58
+    pdf.ensure_space(card_height + 12)
+    for index, (label, value, tone) in enumerate(cards):
+        x = pdf.margin + index * (card_width + card_gap)
+        pdf.rect(x, pdf.y, card_width, card_height, fill=tone, stroke="#DDE7F0")
+        pdf.text(x + 8, pdf.y + 16, label, size=7, color="#6D7B8D", bold=True)
+        pdf.text(x + 8, pdf.y + 38, value, size=10, color="#102033", bold=True)
+    pdf.y += card_height + 16
+
+
+def add_pdf_bar_rows(
+    pdf: PdfReport,
+    rows: list[dict],
+    label_key: str,
+    value_key: str,
+    empty_text: str,
+    color_key: str | None = None,
+    limit: int = 8,
+) -> None:
+    if not rows:
+        pdf.ensure_space(22)
+        pdf.text(pdf.margin, pdf.y, empty_text, size=9, color="#6D7B8D")
+        pdf.y += 20
+        return
+
+    visible_rows = rows[:limit]
+    max_value = max([abs(to_decimal(row.get(value_key) or 0)) for row in visible_rows] + [Decimal("1")])
+    for row in visible_rows:
+        pdf.ensure_space(31)
+        value = round_money(row.get(value_key) or 0)
+        label = truncate_pdf_text(row.get(label_key) or "Sem categoria", 30)
+        pdf.text(pdf.margin, pdf.y + 8, label, size=9, color="#102033", bold=True)
+        pdf.text(pdf.width - pdf.margin - 96, pdf.y + 8, format_brl(value), size=9, color="#102033")
+        bar_x = pdf.margin
+        bar_y = pdf.y + 15
+        bar_width = pdf.width - pdf.margin * 2
+        pdf.rect(bar_x, bar_y, bar_width, 8, fill="#EEF5F8")
+        filled_width = float(abs(value) / max_value) * bar_width if max_value > 0 else 0
+        fill_color = row.get(color_key or "") or ("#E14B5A" if value > 0 and value_key == "delta" else "#14B8A6")
+        if value_key == "delta" and value < 0:
+            fill_color = "#18A957"
+        pdf.rect(bar_x, bar_y, max(2, filled_width), 8, fill=fill_color)
+        pdf.y += 31
+
+
+def add_pdf_table(pdf: PdfReport, headers: list[str], rows: list[list[str]], widths: list[float], empty_text: str) -> None:
+    if not rows:
+        pdf.ensure_space(22)
+        pdf.text(pdf.margin, pdf.y, empty_text, size=9, color="#6D7B8D")
+        pdf.y += 20
+        return
+
+    def draw_header() -> None:
+        pdf.rect(pdf.margin, pdf.y, sum(widths), 22, fill="#EEF5F8", stroke="#DDE7F0")
+        x = pdf.margin + 6
+        for index, header in enumerate(headers):
+            pdf.text(x, pdf.y + 14, header, size=8, color="#102033", bold=True)
+            x += widths[index]
+        pdf.y += 22
+
+    draw_header()
+    for row in rows:
+        pdf.ensure_space(24)
+        if pdf.y < 60:
+            draw_header()
+        pdf.line(pdf.margin, pdf.y, pdf.margin + sum(widths), pdf.y, "#DDE7F0")
+        x = pdf.margin + 6
+        for index, cell in enumerate(row):
+            pdf.text(x, pdf.y + 15, truncate_pdf_text(cell, max(10, int(widths[index] / 4.8))), size=8, color="#102033")
+            x += widths[index]
+        pdf.y += 24
+    pdf.y += 8
+
+
+def build_report_pdf(report: dict, rows: list[dict], generated_at: datetime) -> bytes:
+    pdf = PdfReport()
+    dashboard = report["dashboard"]
+    goals = report["goals"]
+    score = report["score"]
+    category_rows = dashboard.get("categoryBreakdown") or []
+    payment_rows = dashboard.get("paymentMethodBreakdown") or []
+    trend_rows = (dashboard.get("monthlyTrend") or [])[-6:]
+    growth = report.get("categoryGrowth") or {"hasHistory": False, "items": []}
+
+    pdf.rect(0, 0, pdf.width, 92, fill="#0A1728")
+    pdf.text(pdf.margin, 34, "Pulsar", size=23, color="#FFFFFF", bold=True)
+    pdf.text(pdf.margin, 58, "Relatório dashboard", size=14, color="#DDFBF1", bold=True)
+    pdf.text(pdf.width - 198, 35, f"Mês analisado: {report['month']}", size=10, color="#FFFFFF")
+    pdf.text(
+        pdf.width - 198,
+        54,
+        f"Gerado em: {generated_at.strftime('%d/%m/%Y %H:%M UTC')}",
+        size=9,
+        color="#DDE7F0",
+    )
+    pdf.y = 112
+
+    add_pdf_section(pdf, "Resumo mensal", f"Ritmo Score: {score['score']} - {score['label']}")
+    add_pdf_summary_cards(
+        pdf,
+        [
+            ("Salário", format_brl(dashboard.get("salaryBase") or 0), "#FFFFFF"),
+            ("Entradas", format_brl(dashboard.get("inflow") or 0), "#E9F8EF"),
+            ("Saídas", format_brl(dashboard.get("outflow") or 0), "#FDEEEF"),
+            ("Saldo projetado", format_brl(dashboard.get("projectedBalance") or 0), "#EEF5FF"),
+            ("Meta diária", format_brl(goals.get("dailyGoal") or goals.get("recommendedDailyGoal") or 0), "#F8F5FF"),
+        ],
+    )
+
+    add_pdf_section(pdf, "Categorias", "Gastos por categoria com barras proporcionais.")
+    category_pdf_rows = [
+        {"name": row.get("name") or "Sem categoria", "total": row.get("total") or 0, "color": row.get("color") or "#14B8A6"}
+        for row in category_rows
+    ]
+    add_pdf_bar_rows(pdf, category_pdf_rows, "name", "total", "Sem categorias para analisar.", "color")
+
+    add_pdf_section(pdf, "Crescimento por categoria", f"Comparação com {growth.get('previousMonth') or 'o mês anterior'}.")
+    if growth.get("hasHistory"):
+        add_pdf_bar_rows(
+            pdf,
+            growth.get("items") or [],
+            "name",
+            "delta",
+            "Ainda não há histórico suficiente para comparar.",
+            "color",
+        )
+    else:
+        pdf.text(pdf.margin, pdf.y, "Ainda não há histórico suficiente para comparar.", size=9, color="#6D7B8D")
+        pdf.y += 22
+
+    add_pdf_section(pdf, "Formas de pagamento", "Concentração de gastos por método de pagamento.")
+    add_pdf_bar_rows(
+        pdf,
+        [{"payment_method": payment_method_label(row.get("payment_method")), "total": row.get("total") or 0} for row in payment_rows],
+        "payment_method",
+        "total",
+        "Sem formas de pagamento para analisar.",
+    )
+
+    add_pdf_section(pdf, "Evolução", "Entradas, saídas e saldo dos últimos meses.")
+    add_pdf_table(
+        pdf,
+        ["Mês", "Entradas", "Saídas", "Saldo"],
+        [
+            [
+                row.get("label") or row.get("month") or "",
+                format_brl(row.get("inflow") or 0),
+                format_brl(row.get("outflow") or 0),
+                format_brl(row.get("net") or 0),
+            ]
+            for row in trend_rows
+        ],
+        [84, 120, 120, 120],
+        "Sem evolução mensal para analisar.",
+    )
+
+    add_pdf_section(pdf, "Alertas principais", "Pontos que merecem atenção no fechamento do mês.")
+    alert_rows = report.get("alerts") or []
+    if alert_rows:
+        for alert in alert_rows[:5]:
+            pdf.ensure_space(26)
+            pdf.rect(pdf.margin, pdf.y, pdf.width - pdf.margin * 2, 22, fill="#FFF7E7", stroke="#F2B84B")
+            pdf.text(pdf.margin + 8, pdf.y + 14, truncate_pdf_text(alert.get("message") or "", 90), size=8, color="#102033")
+            pdf.y += 28
+    else:
+        pdf.text(pdf.margin, pdf.y, "Nenhum alerta relevante para este mês.", size=9, color="#6D7B8D")
+        pdf.y += 22
+
+    add_pdf_section(pdf, "Movimentações", "Tabela das movimentações do mês analisado.")
+    transaction_rows = []
+    for row in rows:
+        installment = ""
+        if row.get("total_installments"):
+            installment = f"{row.get('installment_number')}/{row.get('total_installments')}"
+        transaction_rows.append(
+            [
+                str(row.get("transaction_date") or ""),
+                "Entrada" if row.get("type") == "income" else "Despesa",
+                str(row.get("title") or ""),
+                str(row.get("category_name") or "Sem categoria"),
+                payment_method_label(row.get("payment_method")),
+                format_brl(row.get("amount") or 0),
+                installment,
+            ]
+        )
+    add_pdf_table(
+        pdf,
+        ["Data", "Tipo", "Nome", "Categoria", "Pagamento", "Valor", "Parcela"],
+        transaction_rows,
+        [52, 52, 130, 92, 76, 76, 46],
+        "Nenhuma movimentação encontrada para este mês.",
+    )
+    return pdf.build()
+
+
 @app.get("/api/export/pdf")
 @limiter.limit("20 per 1 hour")
 def export_pdf(request: Request, month: Optional[str] = None, current_user: dict = Depends(get_current_user)) -> Response:
     user_id = current_user["id"]
     month_key = validate_month_text(month) or get_current_month()
-    settings = get_settings(user_id)
-    totals = get_month_totals(user_id, month_key)
-    score_data = calculate_score(user_id, month_key)
+    report = get_reports_summary(user_id, month_key)
     rows = get_export_transactions(user_id, month_key)
-    balance = round_money(settings["monthly_income"] or 0) + totals["inflow"] - totals["outflow"]
-
-    lines = [
-        "Ritmo Financeiro Pro",
-        f"Relatório financeiro - {month_key}",
-        "",
-        f"Salário base: {format_brl(settings['monthly_income'] or 0)}",
-        f"Entradas: {format_brl(totals['inflow'])}",
-        f"Saídas: {format_brl(totals['outflow'])}",
-        f"Saldo projetado: {format_brl(balance)}",
-        f"Ritmo Score: {score_data['score']} - {score_data['label']}",
-        "",
-        "Movimentações",
-    ]
-
-    if not rows:
-        lines.append("Nenhuma transação encontrada para este mês.")
-    for row in rows:
-        installment = ""
-        if row.get("total_installments"):
-            installment = f" ({row.get('installment_number')}/{row.get('total_installments')})"
-        sign = "+" if row.get("type") == "income" else "-"
-        lines.append(
-            " | ".join(
-                [
-                    str(row.get("transaction_date") or ""),
-                    str(row.get("title") or ""),
-                    str(row.get("category_name") or "Sem categoria"),
-                    str(row.get("payment_method") or ""),
-                    f"{sign}{format_brl(row.get('amount') or 0)}{installment}",
-                ]
-            )
-        )
-
-    headers = {"Content-Disposition": f'attachment; filename="financeiro-{month_key}.pdf"'}
-    return Response(content=build_basic_pdf(lines), media_type="application/pdf", headers=headers)
+    headers = {
+        "Content-Disposition": f'attachment; filename="pulsar-relatorio-{month_key}.pdf"',
+        "Cache-Control": "no-store",
+        "Pragma": "no-cache",
+    }
+    return Response(
+        content=build_report_pdf(report, rows, datetime.now(timezone.utc)),
+        media_type="application/pdf",
+        headers=headers,
+    )
 
 
 @app.post("/api/cards")
@@ -3705,10 +4521,9 @@ def create_installments(card_id: int, payload: InstallmentPayload, current_user:
 @app.post("/api/installments/simulate")
 def simulate_installments(
     payload: InstallmentSimulationPayload,
-    current_user: dict = Depends(get_current_user),
+    _current_user: dict = Depends(get_current_user),
 ) -> dict:
     """Simula o impacto de uma compra parcelada sem exigir cartão cadastrado."""
-    user_id = current_user["id"]
     purchase_date = validate_date_text(payload.purchaseDate, "Data da compra")
     base_month = month_key_from_date(purchase_date)
     
@@ -3937,4 +4752,4 @@ else:
 
     @app.get("/")
     def api_root() -> dict:
-        return {"service": "Ritmo Financeiro Pro API", "docs": "/docs", "health": "/api/health"}
+        return {"service": "Pulsar API", "docs": "/docs", "health": "/api/health"}

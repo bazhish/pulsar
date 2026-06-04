@@ -2,9 +2,9 @@ import { ShieldCheck } from "lucide-react";
 
 export function CreditCardEducationCard() {
   return (
-    <section className="rounded-app border border-pulse/20 bg-gradient-to-r from-mint to-white p-4 shadow-soft">
+    <section className="rounded-app border border-pulse/20 bg-gradient-to-r from-mint/80 to-surface p-4 shadow-soft">
       <div className="flex items-start gap-3">
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-app bg-white text-pulse shadow-soft">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-app bg-surface text-pulse shadow-soft">
           <ShieldCheck size={20} />
         </span>
         <div>

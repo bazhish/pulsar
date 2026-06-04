@@ -1,22 +1,72 @@
+# Environment
 .env
 .env.*
 !.env.example
+
+# Python
 __pycache__/
-*.pyc
-data/
-*.log
-logs/
-.agents/
-skills-lock.json
-.coverage
-htmlcov/
-coverage.xml
+*.py[cod]
+*$py.class
+.pytest_cache/
 .ruff_cache/
+.mypy_cache/
+.coverage
+coverage.xml
+htmlcov/
 dist/
 build/
+*.egg-info/
+.venv/
+venv/
+ENV/
+
+# Node / Next.js
 node_modules/
 .next/
-frontend/node_modules/
-frontend/.next/
-frontend/out/
+out/
+.vercel/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
 *.tsbuildinfo
+
+# Logs
+*.log
+logs/
+fin.log
+
+# Local data and uploads
+data/
+tmp/
+temp/
+uploads/
+exports/
+reports/generated/
+artifacts/
+
+# Generated reports (keep intentional examples under docs/examples/)
+*.pdf
+*.csv
+!docs/examples/**/*.csv
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Agent / local tooling
+.agents/
+skills-lock.json
+
+# Security — never commit secrets or keys
+*.pem
+*.key
+*.crt
+secrets.*
+service-account*.json

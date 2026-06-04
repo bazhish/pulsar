@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { Tooltip } from "@/components/Tooltip";
-import { api } from "@/lib/api";
+import { api, apiAssetUrl } from "@/lib/api";
 import { useAuthToken } from "@/lib/useAuthToken";
 import type { User } from "@/types/finance";
 
@@ -26,8 +26,8 @@ function UserAvatar({ compact, user }: { compact: boolean; user: User | null }) 
     return (
       <span
         aria-hidden
-        className={`${sizeClass} shrink-0 rounded-app bg-cover bg-center shadow-sm`}
-        style={{ backgroundImage: `url(${user.avatar_url})` }}
+        className={`${sizeClass} shrink-0 rounded-app bg-cover bg-center shadow-sm ring-1 ring-line`}
+        style={{ backgroundImage: `url(${apiAssetUrl(user.avatar_url)})` }}
       />
     );
   }
@@ -46,15 +46,20 @@ export function UserMenu({ compact }: UserMenuProps) {
   useEffect(() => {
     if (!token) return;
     let active = true;
-    api.me(token)
+
+    const loadUser = () => api.me(token)
       .then((nextUser) => {
         if (active) setUser(nextUser);
       })
       .catch(() => {
         if (active) setUser(null);
       });
+
+    loadUser();
+    window.addEventListener("pulsar:user-updated", loadUser);
     return () => {
       active = false;
+      window.removeEventListener("pulsar:user-updated", loadUser);
     };
   }, [token]);
 
@@ -63,7 +68,7 @@ export function UserMenu({ compact }: UserMenuProps) {
   const link = (
     <Link
       aria-label={compact ? `Abrir perfil de ${displayName}` : undefined}
-      className={`focus-ring flex items-center rounded-app border border-white/80 bg-white/90 shadow-sm transition hover:bg-white ${compact ? "justify-center p-2" : "gap-3 p-3"}`}
+      className={`focus-ring theme-control flex items-center rounded-app border shadow-sm transition hover:border-pulse/50 ${compact ? "justify-center p-2" : "gap-3 p-3"}`}
       href="/perfil"
     >
       <UserAvatar compact={compact} user={user} />

@@ -15,7 +15,7 @@ export function IconButton({ className = "", icon: Icon, label, showTooltip = tr
     <button
       {...props}
       aria-label={label}
-      className={`focus-ring inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-app border border-line bg-white/90 text-ink shadow-sm transition hover:bg-white ${className}`}
+      className={`focus-ring theme-control inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-app border text-ink shadow-sm transition hover:border-pulse/50 ${className}`}
       type={type}
     >
       <Icon size={18} aria-hidden />

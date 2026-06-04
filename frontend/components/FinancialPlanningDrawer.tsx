@@ -54,7 +54,7 @@ export function FinancialPlanningDrawer({ open, settings, onClose, onSave }: Fin
 
   return (
     <div className="fixed inset-0 z-50 bg-ink/45 backdrop-blur-sm">
-      <div className="absolute inset-x-0 bottom-0 max-h-[92vh] overflow-y-auto rounded-t-app border border-white/80 bg-paper p-4 shadow-lift sm:left-auto sm:right-4 sm:top-4 sm:h-[calc(100vh-2rem)] sm:w-[420px] sm:rounded-app">
+      <div className="theme-surface absolute inset-x-0 bottom-0 max-h-[92vh] overflow-y-auto rounded-t-app border p-4 shadow-lift sm:left-auto sm:right-4 sm:top-4 sm:h-[calc(100vh-2rem)] sm:w-[420px] sm:rounded-app">
         <div className="mb-4 flex items-start justify-between gap-3">
           <div>
             <p className="flex items-center gap-2 text-sm font-semibold text-pulse">
@@ -64,7 +64,7 @@ export function FinancialPlanningDrawer({ open, settings, onClose, onSave }: Fin
             <h2 className="mt-1 text-xl font-black">Editar planejamento</h2>
             <p className="mt-1 text-sm text-muted">Atualize o salário, a reserva planejada e a meta diária usada no Resumo.</p>
           </div>
-          <button className="focus-ring h-9 w-9 rounded-app border border-line bg-white" type="button" onClick={onClose} aria-label="Fechar">
+          <button className="focus-ring theme-control h-9 w-9 rounded-app border" type="button" onClick={onClose} aria-label="Fechar">
             <X className="mx-auto" size={16} />
           </button>
         </div>

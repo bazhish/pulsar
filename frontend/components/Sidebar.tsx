@@ -25,7 +25,7 @@ export function Sidebar({ compact = false, expandedWidth = 280, onResizeKeyDown,
 
   return (
     <aside
-      className="relative hidden h-screen min-h-0 border-r border-white/70 bg-white/90 shadow-soft backdrop-blur lg:sticky lg:top-0 lg:flex lg:flex-col"
+      className="theme-surface relative hidden h-screen min-h-0 border-r shadow-soft backdrop-blur lg:sticky lg:top-0 lg:flex lg:flex-col"
       style={{ width }}
     >
       <div className={`flex min-h-0 flex-1 flex-col overflow-y-auto px-3 py-4 ${compact ? "items-center" : ""}`}>
@@ -33,7 +33,7 @@ export function Sidebar({ compact = false, expandedWidth = 280, onResizeKeyDown,
           <Tooltip disabled={!compact} label="Pulsar" side="right">
             <Link
               aria-label={compact ? "Ir para o Resumo" : undefined}
-              className={`focus-ring flex min-w-0 items-center gap-3 rounded-app bg-gradient-to-br from-mint to-white p-2 shadow-sm ${compact ? "justify-center" : "flex-1"}`}
+              className={`focus-ring flex min-w-0 items-center gap-3 rounded-app border border-line bg-gradient-to-br from-mint/85 to-surface p-2 shadow-sm ${compact ? "justify-center" : "flex-1"}`}
               href="/dashboard"
             >
               <Image src="/logo-mark.svg" width={compact ? 34 : 40} height={compact ? 34 : 40} alt="" aria-hidden />

@@ -1,0 +1,39 @@
+name: Feature request
+description: Sugerir melhoria ou nova funcionalidade
+title: "[feat]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Descreva o problema do usuário, não apenas a solução técnica.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Qual problema isso resolve?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposta de solução
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternativas consideradas
+
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Impacto provável
+      options:
+        - label: Backend
+        - label: Frontend
+        - label: Banco / migrations
+        - label: Documentação
+        - label: Segurança / privacidade

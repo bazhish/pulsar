@@ -56,6 +56,7 @@ async def clean_db():
             DELETE FROM cards WHERE user_id IN (SELECT id FROM users WHERE email LIKE %s);
             DELETE FROM categories WHERE user_id IN (SELECT id FROM users WHERE email LIKE %s);
             DELETE FROM settings WHERE user_id IN (SELECT id FROM users WHERE email LIKE %s);
+            DELETE FROM login_failures_state;
             DELETE FROM users WHERE email LIKE %s;
             """,
             ("%@example.test", "%@example.test", "%@example.test", "%@example.test", "%@example.test", "%@example.test"),
@@ -70,6 +71,7 @@ async def clean_db():
             DELETE FROM cards WHERE user_id IN (SELECT id FROM users WHERE email LIKE %s);
             DELETE FROM categories WHERE user_id IN (SELECT id FROM users WHERE email LIKE %s);
             DELETE FROM settings WHERE user_id IN (SELECT id FROM users WHERE email LIKE %s);
+            DELETE FROM login_failures_state;
             DELETE FROM users WHERE email LIKE %s;
             """,
             ("%@example.test", "%@example.test", "%@example.test", "%@example.test", "%@example.test", "%@example.test"),

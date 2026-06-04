@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
 import { RootShell } from "@/components/RootShell";
+import { ThemeProvider, ThemeScript } from "@/lib/theme";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Ritmo Financeiro Pro",
-  description: "Controle financeiro pessoal",
+  title: "Pulsar — finanças no ritmo certo",
+  description: "Controle salário, despesas, metas e parcelas em um só lugar",
   icons: {
     icon: "/logo-mark.svg"
   }
@@ -12,9 +13,12 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="pt-BR">
+    <html lang="pt-BR" suppressHydrationWarning>
       <body>
-        <RootShell>{children}</RootShell>
+        <ThemeScript />
+        <ThemeProvider>
+          <RootShell>{children}</RootShell>
+        </ThemeProvider>
       </body>
     </html>
   );

@@ -1,14 +1,19 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
-import { ArrowRight, ShieldCheck, TrendingUp } from "lucide-react";
+import { ArrowRight, Moon, Sun } from "lucide-react";
 import { api } from "@/lib/api";
+import { useTheme } from "@/lib/theme";
+import { AuthBenefits } from "@/components/auth/AuthBenefits";
+import { AuthBrand } from "@/components/auth/AuthBrand";
+import { AuthProductDemo } from "@/components/auth/AuthProductDemo";
+import { SocialLoginButtons } from "@/components/auth/SocialLoginButtons";
 
 export default function LoginPage() {
   const router = useRouter();
+  const { effectiveTheme, preference, setPreference } = useTheme();
   const [error, setError] = useState("");
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -23,48 +28,83 @@ export default function LoginPage() {
     }
   }
 
-  return (
-    <main className="grid min-h-screen px-4 py-6 lg:grid-cols-[1fr_0.9fr] lg:gap-8 lg:px-10">
-      <section className="mx-auto flex w-full max-w-md flex-col justify-center">
-        <Image src="/logo.svg" width={230} height={65} alt="Ritmo Financeiro Pro" priority />
-        <form onSubmit={handleSubmit} className="app-card mt-6 p-5">
-          <p className="text-sm font-bold text-pulse">Bem-vindo de volta</p>
-          <h1 className="mt-1 text-2xl font-black leading-tight">Entre para ver seu ritmo financeiro.</h1>
-          <label className="mt-5 block text-sm font-semibold">
-            E-mail
-            <input className="field mt-1" name="email" type="email" autoComplete="email" required />
-          </label>
-          <label className="mt-3 block text-sm font-semibold">
-            Senha
-            <input className="field mt-1" name="password" type="password" autoComplete="current-password" required />
-          </label>
-          {error ? <p className="mt-3 rounded-app bg-coral/10 p-3 text-sm text-coral">{error}</p> : null}
-          <button className="btn-primary mt-5 w-full" type="submit">
-            Entrar
-            <ArrowRight size={16} />
-          </button>
-          <Link className="mt-4 block text-center text-sm font-bold text-plum" href="/cadastro">Criar conta</Link>
-        </form>
-      </section>
+  function toggleTheme() {
+    setPreference(effectiveTheme === "dark" ? "light" : "dark");
+  }
 
-      <section className="mt-6 hidden overflow-hidden rounded-app border border-white/70 bg-gradient-to-br from-night via-ink to-plum p-8 text-white shadow-lift lg:flex lg:flex-col lg:justify-between">
-        <div>
-          <span className="inline-flex items-center gap-2 rounded-app bg-white/10 px-3 py-2 text-sm font-semibold">
-            <TrendingUp size={16} />
-            Ritmo do mês
-          </span>
-          <h2 className="mt-6 max-w-md text-4xl font-black leading-tight">Organização financeira pessoal com leitura rápida.</h2>
-          <p className="mt-3 max-w-md text-sm text-white/70">Resumo, metas, orçamento e cartões em uma experiência limpa, jovem e confiável.</p>
-        </div>
-        <div className="grid grid-cols-3 gap-3">
-          {["Resumo", "Metas", "Cartões"].map((item) => (
-            <div key={item} className="rounded-app border border-white/10 bg-white/10 p-4 backdrop-blur">
-              <ShieldCheck className="text-pulse" size={20} />
-              <strong className="mt-3 block">{item}</strong>
-            </div>
-          ))}
-        </div>
-      </section>
+  return (
+    <main className="auth-glow relative min-h-screen px-4 py-6 lg:px-10 lg:py-10">
+      <button
+        type="button"
+        className="btn-secondary absolute right-4 top-4 z-10 px-3 py-2 lg:right-10"
+        onClick={toggleTheme}
+        aria-label="Alternar tema"
+      >
+        {preference === "system" ? (
+          effectiveTheme === "dark" ? <Moon size={16} /> : <Sun size={16} />
+        ) : effectiveTheme === "dark" ? (
+          <Moon size={16} />
+        ) : (
+          <Sun size={16} />
+        )}
+      </button>
+
+      <div className="mx-auto grid w-full max-w-6xl gap-8 lg:grid-cols-[1.15fr_0.85fr] lg:items-center">
+        <section className="order-2 hidden lg:order-1 lg:block">
+          <AuthBrand />
+          <p className="mt-5 max-w-xl text-sm text-muted">
+            Controle salário, despesas, metas e parcelas em um só lugar. Veja o que importa antes de entrar.
+          </p>
+          <div className="mt-6">
+            <AuthProductDemo />
+          </div>
+          <div className="mt-5">
+            <AuthBenefits />
+          </div>
+        </section>
+
+        <section className="order-1 mx-auto w-full max-w-md lg:order-2">
+          <div className="lg:hidden">
+            <AuthBrand />
+          </div>
+
+          <div className="mb-4 lg:hidden">
+            <AuthProductDemo compact />
+          </div>
+
+          <form onSubmit={handleSubmit} className="glass-panel p-5 md:p-6">
+            <p className="text-sm font-bold text-pulse">Entre no Pulsar</p>
+            <h1 className="mt-1 text-2xl font-black leading-tight text-ink">Acompanhe o pulso do seu mês</h1>
+            <p className="mt-2 text-sm text-muted">Saiba quanto pode gastar hoje e mantenha metas no ritmo certo.</p>
+
+            <label className="mt-5 block text-sm font-semibold text-ink">
+              E-mail
+              <input className="field mt-1" name="email" type="email" autoComplete="email" required />
+            </label>
+            <label className="mt-3 block text-sm font-semibold text-ink">
+              Senha
+              <input className="field mt-1" name="password" type="password" autoComplete="current-password" required />
+            </label>
+
+            {error ? <p className="mt-3 rounded-app bg-coral/10 p-3 text-sm text-coral">{error}</p> : null}
+
+            <button className="btn-primary mt-5 w-full" type="submit">
+              Entrar
+              <ArrowRight size={16} />
+            </button>
+
+            <SocialLoginButtons mode="login" />
+
+            <Link className="mt-4 block text-center text-sm font-bold text-plum" href="/cadastro">
+              Criar conta gratuita
+            </Link>
+          </form>
+
+          <div className="mt-4 lg:hidden">
+            <AuthBenefits compact />
+          </div>
+        </section>
+      </div>
     </main>
   );
 }

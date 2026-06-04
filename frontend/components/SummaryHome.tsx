@@ -1,3 +1,5 @@
+"use client";
+
 import { CreditCard, PieChart as PieIcon, ReceiptText, Wallet } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { ActionRecommendationCard } from "@/components/ActionRecommendationCard";
@@ -8,6 +10,7 @@ import { QuickSettingsCard } from "@/components/QuickSettingsCard";
 import { SectionIntro } from "@/components/SectionIntro";
 import { TransactionList } from "@/components/TransactionList";
 import { formatBRL } from "@/lib/format";
+import { useTheme } from "@/lib/theme";
 import type { Bootstrap } from "@/types/finance";
 
 type SummaryHomeProps = {
@@ -31,6 +34,7 @@ const paymentMethodColors: Record<string, string> = {
 };
 
 export function SummaryHome({ data, chartsReady, onEditPlanning }: SummaryHomeProps) {
+  const { effectiveTheme } = useTheme();
   const dashboard = data?.dashboard;
   const tone = dashboard ? statusTone[dashboard.rhythmStatus] : "neutral";
   const pieData = (dashboard?.categoryBreakdown || []).map((item) => ({
@@ -47,6 +51,14 @@ export function SummaryHome({ data, chartsReady, onEditPlanning }: SummaryHomePr
   
   const hasBudget = Boolean(data?.budget.items.length);
   const hasCards = Boolean(data?.cards.length);
+  const chartGrid = effectiveTheme === "dark" ? "#2D3E55" : "#DDE7F0";
+  const chartText = effectiveTheme === "dark" ? "#96A4B8" : "#6D7B8D";
+  const tooltipStyle = {
+    backgroundColor: effectiveTheme === "dark" ? "#0E1B2D" : "#FFFFFF",
+    border: `1px solid ${chartGrid}`,
+    borderRadius: 12,
+    color: effectiveTheme === "dark" ? "#E8EFF7" : "#102033"
+  };
 
   return (
     <div className="grid gap-4">
@@ -80,14 +92,14 @@ export function SummaryHome({ data, chartsReady, onEditPlanning }: SummaryHomePr
                     <Pie data={pieData} dataKey="total" nameKey="name" innerRadius={48} outerRadius={88} paddingAngle={3}>
                       {pieData.map((item) => <Cell key={item.name} fill={item.color} />)}
                     </Pie>
-                    <Tooltip formatter={(value) => formatBRL(Number(value))} />
+                    <Tooltip contentStyle={tooltipStyle} formatter={(value) => formatBRL(Number(value))} />
                   </PieChart>
                 </ResponsiveContainer>
               ) : null}
             </div>
             <div className="space-y-2">
               {pieData.slice(0, 6).map((item) => (
-                <div key={item.name} className="flex items-center justify-between gap-3 rounded-app bg-white/75 p-3 text-sm shadow-sm">
+                <div key={item.name} className="flex items-center justify-between gap-3 rounded-app border border-line bg-surface/75 p-3 text-sm shadow-sm">
                   <span className="flex items-center gap-2">
                     <span className="h-3 w-3 rounded-full" style={{ backgroundColor: item.color }} />
                     {item.name}
@@ -121,7 +133,7 @@ export function SummaryHome({ data, chartsReady, onEditPlanning }: SummaryHomePr
                 {chartsReady ? (
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={paymentData} margin={{ top: 5, right: 30, left: 0, bottom: 5 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#DDE7F0" />
+                      <CartesianGrid strokeDasharray="3 3" stroke={chartGrid} />
                       <XAxis 
                         dataKey="payment_method" 
                         tickLine={false} 
@@ -130,17 +142,18 @@ export function SummaryHome({ data, chartsReady, onEditPlanning }: SummaryHomePr
                         textAnchor="end"
                         height={80}
                         interval={0}
-                        tick={{ fontSize: 12 }}
+                        tick={{ fontSize: 12, fill: chartText }}
                       />
                       <YAxis 
                         width={50} 
                         tickFormatter={(value) => `R$${Number(value) / 1000}k`} 
                         tickLine={false} 
                         axisLine={false}
+                        tick={{ fill: chartText }}
                       />
                       <Tooltip 
                         formatter={(value) => formatBRL(Number(value))}
-                        contentStyle={{ backgroundColor: "#F8F9FA", border: "1px solid #DDE7F0", borderRadius: "8px" }}
+                        contentStyle={tooltipStyle}
                       />
                       <Bar dataKey="total" radius={[10, 10, 0, 0]}>
                         {paymentData.map((entry, index) => (
@@ -153,7 +166,7 @@ export function SummaryHome({ data, chartsReady, onEditPlanning }: SummaryHomePr
               </div>
               <div className="grid gap-2 sm:grid-cols-2">
                 {paymentData.map((item) => (
-                  <div key={item.payment_method} className="flex items-center justify-between rounded-app bg-white/75 p-3 text-sm shadow-sm">
+                  <div key={item.payment_method} className="flex items-center justify-between rounded-app border border-line bg-surface/75 p-3 text-sm shadow-sm">
                     <span className="flex items-center gap-2">
                       <span className="h-3 w-3 rounded-full" style={{ backgroundColor: item.color }} />
                       {item.payment_method}

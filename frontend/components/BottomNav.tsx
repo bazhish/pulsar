@@ -9,7 +9,7 @@ export function BottomNav() {
 
   return (
     <nav className="fixed inset-x-0 bottom-0 z-30 px-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] lg:hidden" aria-label="Principal">
-      <div className="scrollbar-none flex gap-1 overflow-x-auto rounded-app border border-white/80 bg-white/95 p-1 shadow-lift backdrop-blur">
+      <div className="theme-surface scrollbar-none flex gap-1 overflow-x-auto rounded-app border p-1 shadow-lift backdrop-blur">
         {mainNavItems.map((item) => {
           const Icon = item.icon;
           const active = isActiveNavItem(pathname, item.href);

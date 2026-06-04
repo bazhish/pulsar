@@ -27,6 +27,7 @@ def test_create_access_token_contains_subject(monkeypatch):
     token = create_access_token("user-id")
     decoded = jwt.decode(token, "unit-secret-key-for-tests-32-chars", algorithms=["HS256"])
     assert decoded["sub"] == "user-id"
+    assert isinstance(decoded["iat"], int)
 
 
 def test_expired_token_raises_jwterror():

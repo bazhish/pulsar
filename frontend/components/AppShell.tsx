@@ -90,7 +90,7 @@ export function AppShell({ children }: Readonly<{ children: ReactNode }>) {
   return (
     <AppShellContext.Provider value={true}>
       <div className="min-h-screen lg:grid lg:transition-[grid-template-columns] lg:duration-200 lg:ease-out" style={gridStyle}>
-        <a className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[60] focus:rounded-app focus:bg-white focus:px-4 focus:py-2 focus:font-semibold focus:text-ink focus:shadow-lift" href="#app-main">
+        <a className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[60] focus:rounded-app focus:bg-surface focus:px-4 focus:py-2 focus:font-semibold focus:text-ink focus:shadow-lift" href="#app-main">
           Pular para o conteúdo
         </a>
         <Sidebar

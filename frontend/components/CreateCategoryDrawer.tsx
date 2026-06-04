@@ -80,7 +80,7 @@ export function CreateCategoryDrawer({
       />
 
       {/* Modal */}
-      <div className="relative bg-white rounded-app shadow-lift p-6 max-w-md w-full mx-4">
+      <div className="theme-surface relative mx-4 w-full max-w-md rounded-app border p-6 shadow-lift">
         <div className="flex items-center justify-between gap-4 mb-4">
           <h2 className="text-lg font-bold">Criar categoria</h2>
           <button
@@ -120,7 +120,7 @@ export function CreateCategoryDrawer({
                       ? type === "expense"
                         ? "border-coral bg-coral/10 text-coral"
                         : "border-leaf bg-leaf/10 text-leaf"
-                      : "border-line bg-white hover:bg-white/75"
+                      : "theme-control border-line hover:border-pulse/50"
                   }`}
                   disabled={loading}
                 >
@@ -141,7 +141,7 @@ export function CreateCategoryDrawer({
                   className={`h-10 rounded-app border-2 transition ${
                     form.color === color
                       ? "border-ink scale-110"
-                      : "border-white/50 hover:border-white"
+                      : "border-line hover:border-ink"
                   }`}
                   style={{ backgroundColor: color }}
                   aria-label={`Selecionar cor ${color}`}
@@ -161,8 +161,8 @@ export function CreateCategoryDrawer({
                   onClick={() => setForm({ ...form, icon })}
                   className={`h-10 text-xl rounded-app border-2 flex items-center justify-center transition ${
                     form.icon === icon
-                      ? "border-ink scale-110 bg-white/75"
-                      : "border-white/50 hover:border-white hover:bg-white/50"
+                      ? "scale-110 border-ink bg-surface/75"
+                      : "border-line hover:border-pulse hover:bg-pulse/10"
                   }`}
                   aria-label={`Selecionar ícone ${icon}`}
                   disabled={loading}

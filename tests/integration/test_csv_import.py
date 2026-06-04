@@ -29,6 +29,7 @@ async def upload_preview_confirm(client, auth_headers):
     preview = preview_response.json()
     assert preview["validRows"] == 2
     assert preview["invalidRows"] == 0
+    assert preview["duplicateRows"] == 0
     assert preview["preview"][1]["amount"] == 125.5
     assert preview["preview"][1]["type"] == "expense"
 
@@ -48,6 +49,31 @@ async def test_csv_import_creates_transactions_and_skips_duplicates(client, auth
     second_result = await upload_preview_confirm(client, auth_headers)
     assert second_result["imported"] == 0
     assert second_result["duplicates"] == 2
+
+
+@pytest.mark.asyncio
+async def test_csv_preview_reports_existing_duplicates_before_confirm(client, auth_headers):
+    await upload_preview_confirm(client, auth_headers)
+
+    upload_response = await client.post(
+        "/api/imports/csv/upload",
+        headers=auth_headers,
+        files={"file": ("extrato.csv", CSV_CONTENT.encode("utf-8"), "text/csv")},
+    )
+    assert upload_response.status_code == 200, upload_response.text
+    upload = upload_response.json()
+
+    payload = {
+        "importToken": upload["importToken"],
+        "mapping": {"date": "data", "description": "descricao", "value": "valor", "type": "tipo"},
+    }
+    preview_response = await client.post("/api/imports/csv/preview", headers=auth_headers, json=payload)
+    assert preview_response.status_code == 200, preview_response.text
+    preview = preview_response.json()
+
+    assert preview["validRows"] == 2
+    assert preview["duplicateRows"] == 2
+    assert len(preview["duplicates"]) == 2
 
 
 @pytest.mark.asyncio

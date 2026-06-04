@@ -5,11 +5,11 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        ink: "#102033",
-        paper: "#F3F7FB",
-        surface: "#FFFFFF",
-        muted: "#6D7B8D",
-        line: "#DDE7F0",
+        ink: "rgb(var(--color-ink) / <alpha-value>)",
+        paper: "rgb(var(--color-paper) / <alpha-value>)",
+        surface: "rgb(var(--color-surface) / <alpha-value>)",
+        muted: "rgb(var(--color-muted) / <alpha-value>)",
+        line: "rgb(var(--color-line) / <alpha-value>)",
         leaf: "#18A957",
         coral: "#E14B5A",
         amber: "#F2B84B",
@@ -20,8 +20,8 @@ const config: Config = {
         night: "#0A1728"
       },
       boxShadow: {
-        soft: "0 16px 38px rgba(16, 32, 51, 0.08)",
-        lift: "0 24px 70px rgba(16, 32, 51, 0.16)",
+        soft: "0 16px 38px rgb(var(--shadow-ink) / var(--shadow-soft-opacity))",
+        lift: "0 24px 70px rgb(var(--shadow-ink) / var(--shadow-lift-opacity))",
         glow: "0 22px 60px rgba(20, 184, 166, 0.22)"
       },
       borderRadius: {

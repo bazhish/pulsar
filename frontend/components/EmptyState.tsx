@@ -27,8 +27,8 @@ export function EmptyState({ title, description, actionLabel, href, onAction, ic
   ) : null;
 
   return (
-    <div className="rounded-app border border-dashed border-pulse/30 bg-gradient-to-br from-white to-mint/70 p-5 text-center shadow-soft">
-      <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-app bg-white text-pulse shadow-soft">
+    <div className="rounded-app border border-dashed border-pulse/30 bg-gradient-to-br from-surface to-mint/70 p-5 text-center shadow-soft">
+      <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-app border border-line bg-surface text-pulse shadow-soft">
         <Icon size={22} />
       </div>
       <h3 className="mt-3 text-base font-bold">{title}</h3>

@@ -19,9 +19,12 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto;
 CREATE TABLE IF NOT EXISTS users (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   email TEXT NOT NULL UNIQUE,
-  hashed_password TEXT NOT NULL,
+  hashed_password TEXT,
   name TEXT NOT NULL,
   avatar_url TEXT DEFAULT NULL,
+  auth_provider TEXT,
+  oauth_subject TEXT,
+  password_changed_at TIMESTAMPTZ,
   send_monthly_summary BOOLEAN NOT NULL DEFAULT FALSE,
   is_active BOOLEAN NOT NULL DEFAULT TRUE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -124,7 +127,17 @@ CREATE INDEX IF NOT EXISTS idx_transactions_user_card ON transactions(user_id, c
 CREATE INDEX IF NOT EXISTS idx_card_pins_user_card ON card_pins(user_id, card_id);
 
 ALTER TABLE users
-  ADD COLUMN IF NOT EXISTS send_monthly_summary BOOLEAN NOT NULL DEFAULT FALSE;
+  ADD COLUMN IF NOT EXISTS send_monthly_summary BOOLEAN NOT NULL DEFAULT FALSE,
+  ADD COLUMN IF NOT EXISTS auth_provider TEXT,
+  ADD COLUMN IF NOT EXISTS oauth_subject TEXT,
+  ADD COLUMN IF NOT EXISTS password_changed_at TIMESTAMPTZ;
+
+ALTER TABLE users
+  ALTER COLUMN hashed_password DROP NOT NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_users_oauth_identity
+  ON users (auth_provider, oauth_subject)
+  WHERE auth_provider IS NOT NULL AND oauth_subject IS NOT NULL;
 
 ALTER TABLE transactions
   ADD COLUMN IF NOT EXISTS is_recurring BOOLEAN NOT NULL DEFAULT FALSE,
@@ -160,6 +173,16 @@ CREATE INDEX IF NOT EXISTS idx_transactions_user_source ON transactions(user_id,
 CREATE UNIQUE INDEX IF NOT EXISTS idx_transactions_user_duplicate_hash
   ON transactions(user_id, duplicate_hash)
   WHERE duplicate_hash IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS login_failures_state (
+  identifier_hash TEXT PRIMARY KEY,
+  attempts INTEGER NOT NULL DEFAULT 0,
+  first_attempt_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  blocked_until TIMESTAMPTZ
+);
+
+CREATE INDEX IF NOT EXISTS idx_login_failures_blocked_until
+  ON login_failures_state(blocked_until);
 """
 
 

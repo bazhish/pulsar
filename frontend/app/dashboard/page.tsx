@@ -50,7 +50,7 @@ export default function DashboardPage() {
           description="O essencial do seu mês em uma tela limpa."
           media={
             <div className="rounded-app bg-white/80 p-2 shadow-soft">
-              <Image src="/logo.svg" alt="Ritmo Financeiro Pro" width={180} height={50} priority />
+              <Image src="/logo.svg" alt="Pulsar" width={180} height={50} priority />
             </div>
           }
           title="Resumo"

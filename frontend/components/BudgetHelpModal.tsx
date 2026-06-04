@@ -19,7 +19,7 @@ export function BudgetHelpModal({ open, onClose }: BudgetHelpModalProps) {
       />
 
       {/* Modal */}
-      <div className="relative bg-white rounded-app shadow-lift p-6 max-w-md w-full mx-4">
+      <div className="theme-surface relative mx-4 w-full max-w-md rounded-app border p-6 shadow-lift">
         <div className="flex items-start justify-between gap-4 mb-4">
           <div className="flex items-start gap-3">
             <HelpCircle className="text-mint mt-1" size={24} />

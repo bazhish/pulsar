@@ -1,0 +1,55 @@
+name: Bug report
+description: Reportar comportamento incorreto
+title: "[bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Obrigado pelo report. Não inclua senhas, tokens ou dados financeiros reais.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: O que aconteceu?
+      description: Comportamento observado vs esperado
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Passos para reproduzir
+      placeholder: |
+        1. Login com ...
+        2. Ir em ...
+        3. Clicar em ...
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Área
+      options:
+        - Backend / API
+        - Frontend
+        - Banco / migrations
+        - Auth / OAuth
+        - Importação CSV
+        - Relatórios
+        - Outro
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Commit ou versão (opcional)
+      placeholder: abc1234 ou tag v0.1.0
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Ambiente
+      placeholder: OS, browser, Docker/local, etc.

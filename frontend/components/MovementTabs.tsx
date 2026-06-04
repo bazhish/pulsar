@@ -20,14 +20,14 @@ const tabs: Array<{ value: TransactionType | ""; label: string; helper: string }
 
 export function MovementTabs({ value, onChange, totals }: MovementTabsProps) {
   return (
-    <div className="grid grid-cols-3 gap-2 rounded-app border border-white/80 bg-white/75 p-1 shadow-soft backdrop-blur">
+    <div className="theme-surface grid grid-cols-3 gap-2 rounded-app border p-1 shadow-soft backdrop-blur">
       {tabs.map((tab) => {
         const active = value === tab.value;
         const count = tab.value === "expense" ? totals.expense : tab.value === "income" ? totals.income : totals.all;
         return (
           <button
             key={tab.label}
-            className={`focus-ring rounded-app px-2 py-3 text-left text-sm transition ${active ? "bg-gradient-to-r from-pulse to-plum text-white shadow-soft" : "bg-white text-ink hover:bg-mint/70"}`}
+            className={`focus-ring rounded-app px-2 py-3 text-left text-sm transition ${active ? "bg-gradient-to-r from-pulse to-plum text-white shadow-soft" : "theme-control text-ink hover:border-pulse/50"}`}
             type="button"
             onClick={() => onChange(tab.value)}
           >

@@ -1,6 +1,6 @@
-# Product Vision
+# Visão de produto
 
-Ritmo Financeiro Pro e um assistente financeiro pessoal para transformar registros soltos em decisoes simples.
+Pulsar é um assistente financeiro pessoal mobile first para transformar registros soltos em decisões simples.
 
 Perguntas principais:
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import uuid
 
 import pytest
@@ -58,6 +59,54 @@ async def test_get_me_authenticated(client, auth_headers):
 
 
 @pytest.mark.asyncio
+async def test_security_headers_are_applied(client):
+    response = await client.get("/api/health")
+    assert response.status_code == 200
+    assert response.headers["x-content-type-options"] == "nosniff"
+    assert response.headers["x-frame-options"] == "DENY"
+    assert response.headers["referrer-policy"] == "strict-origin-when-cross-origin"
+    assert response.headers["cache-control"] == "no-store"
+    assert "frame-ancestors 'none'" in response.headers["content-security-policy"]
+
+
+@pytest.mark.asyncio
+async def test_profile_photo_upload_validates_and_updates_user(client, auth_headers):
+    png_content = b"\x89PNG\r\n\x1a\n" + b"\x00" * 32
+    response = await client.post(
+        "/api/auth/me/avatar",
+        headers=auth_headers,
+        files={"file": ("perfil.png", png_content, "image/png")},
+    )
+
+    assert response.status_code == 200, response.text
+    avatar_url = response.json()["avatar_url"]
+    assert avatar_url.startswith("/media/profile-photos/")
+
+    me_response = await client.get("/api/auth/me", headers=auth_headers)
+    assert me_response.status_code == 200
+    assert me_response.json()["avatar_url"] == avatar_url
+
+    photo_response = await client.get(avatar_url)
+    assert photo_response.status_code == 200
+    assert photo_response.content == png_content
+
+    clear_response = await client.put("/api/auth/me", headers=auth_headers, json={"avatar_url": None})
+    assert clear_response.status_code == 200
+    assert clear_response.json()["avatar_url"] is None
+
+
+@pytest.mark.asyncio
+async def test_profile_photo_rejects_invalid_file(client, auth_headers):
+    response = await client.post(
+        "/api/auth/me/avatar",
+        headers=auth_headers,
+        files={"file": ("perfil.txt", b"not an image", "text/plain")},
+    )
+
+    assert response.status_code == 400
+
+
+@pytest.mark.asyncio
 async def test_get_me_unauthenticated(client):
     response = await client.get("/api/auth/me")
     assert response.status_code == 401
@@ -69,3 +118,26 @@ async def test_logout_invalidates_token(client, auth_headers):
     assert response.status_code == 200
     response = await client.get("/api/auth/me", headers=auth_headers)
     assert response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_change_password_invalidates_existing_token(client):
+    user = await register_user(client)
+    headers = {"Authorization": f"Bearer {user['token']}"}
+    await asyncio.sleep(1.1)
+
+    response = await client.post(
+        "/api/auth/change-password",
+        headers=headers,
+        json={"current_password": "Senha123", "new_password": "NovaSenha123"},
+    )
+    assert response.status_code == 200, response.text
+
+    old_token_response = await client.get("/api/auth/me", headers=headers)
+    assert old_token_response.status_code == 401
+
+    login_response = await client.post(
+        "/api/auth/login",
+        data={"email": user["email"], "password": "NovaSenha123"},
+    )
+    assert login_response.status_code == 200, login_response.text

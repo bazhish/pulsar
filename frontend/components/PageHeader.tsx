@@ -16,7 +16,7 @@ export function PageHeader({ actions, description, icon: Icon, media, title }: P
     <header className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
       <div className="flex min-w-0 items-center gap-3">
         {media ? media : Icon ? (
-          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-app border border-white/80 bg-white/90 text-pulse shadow-soft">
+          <span className="theme-control flex h-11 w-11 shrink-0 items-center justify-center rounded-app border text-pulse shadow-soft">
             <Icon size={22} aria-hidden />
           </span>
         ) : null}

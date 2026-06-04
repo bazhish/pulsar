@@ -3,17 +3,52 @@
 @tailwind utilities;
 
 :root {
+  --color-ink: 16 32 51;
+  --color-paper: 243 247 251;
+  --color-surface: 255 255 255;
+  --color-muted: 109 123 141;
+  --color-line: 221 231 240;
+  --shadow-ink: 16 32 51;
+  --shadow-soft-opacity: 0.08;
+  --shadow-lift-opacity: 0.16;
+  --body-bg-start: 247 251 255;
+  --body-bg-end: 238 245 248;
+  --body-glow: 20 184 166;
+  --surface-alpha: 0.95;
+  --control-alpha: 0.95;
+  --focus-offset: 255 255 255;
   color-scheme: light;
   background: #f3f7fb;
   color: #102033;
 }
 
+:root[data-theme="dark"] {
+  --color-ink: 232 239 247;
+  --color-paper: 7 14 25;
+  --color-surface: 14 27 45;
+  --color-muted: 150 164 184;
+  --color-line: 45 62 85;
+  --shadow-ink: 0 0 0;
+  --shadow-soft-opacity: 0.22;
+  --shadow-lift-opacity: 0.36;
+  --body-bg-start: 9 18 32;
+  --body-bg-end: 5 11 20;
+  --body-glow: 47 128 237;
+  --surface-alpha: 0.84;
+  --control-alpha: 0.88;
+  --focus-offset: 7 14 25;
+  color-scheme: dark;
+  background: rgb(var(--color-paper));
+  color: rgb(var(--color-ink));
+}
+
 body {
   min-height: 100vh;
   background:
-    radial-gradient(circle at top left, rgba(20, 184, 166, 0.16), transparent 34rem),
-    linear-gradient(180deg, #f7fbff 0%, #eef5f8 100%);
-  color: #102033;
+    radial-gradient(circle at top left, rgb(var(--body-glow) / 0.2), transparent 34rem),
+    radial-gradient(circle at bottom right, rgb(79 70 229 / 0.12), transparent 28rem),
+    linear-gradient(180deg, rgb(var(--body-bg-start)) 0%, rgb(var(--body-bg-end)) 100%);
+  color: rgb(var(--color-ink));
 }
 
 html {
@@ -26,12 +61,18 @@ select {
   font: inherit;
 }
 
+::selection {
+  background: rgb(20 184 166 / 0.26);
+}
+
 .focus-ring {
   @apply focus:outline-none focus-visible:ring-2 focus-visible:ring-pulse focus-visible:ring-offset-2;
+  --tw-ring-offset-color: rgb(var(--focus-offset));
 }
 
 .surface {
-  @apply rounded-app border border-white/70 bg-white/95 shadow-soft backdrop-blur;
+  @apply rounded-app border border-line bg-surface shadow-soft backdrop-blur;
+  background-color: rgb(var(--color-surface) / var(--surface-alpha));
 }
 
 .btn-primary {
@@ -43,15 +84,33 @@ select {
 }
 
 .btn-secondary {
-  @apply focus-ring inline-flex min-h-11 items-center justify-center gap-2 rounded-app border border-line bg-white/90 px-4 py-2 text-sm font-semibold text-ink shadow-sm transition hover:-translate-y-0.5 hover:bg-white;
+  @apply focus-ring inline-flex min-h-11 items-center justify-center gap-2 rounded-app border border-line bg-surface px-4 py-2 text-sm font-semibold text-ink shadow-sm transition hover:-translate-y-0.5 hover:border-pulse/50;
+  background-color: rgb(var(--color-surface) / var(--control-alpha));
 }
 
 .field {
-  @apply focus-ring min-h-11 w-full rounded-app border border-line bg-white/95 px-3 py-2 text-sm shadow-sm transition placeholder:text-muted/70 hover:border-pulse/50;
+  @apply focus-ring min-h-11 w-full rounded-app border border-line bg-surface px-3 py-2 text-sm text-ink shadow-sm transition placeholder:text-muted/70 hover:border-pulse/50;
+  background-color: rgb(var(--color-surface) / var(--control-alpha));
 }
 
 .app-card {
-  @apply rounded-app border border-white/80 bg-white/95 shadow-soft backdrop-blur;
+  @apply rounded-app border border-line bg-surface shadow-soft backdrop-blur;
+  background-color: rgb(var(--color-surface) / var(--surface-alpha));
+}
+
+.glass-panel {
+  @apply rounded-app border border-line/80 shadow-lift backdrop-blur-xl;
+  background: linear-gradient(
+    145deg,
+    rgb(var(--color-surface) / calc(var(--surface-alpha) + 0.04)) 0%,
+    rgb(var(--color-surface) / calc(var(--surface-alpha) - 0.08)) 100%
+  );
+}
+
+.auth-glow {
+  background:
+    radial-gradient(circle at 18% 12%, rgb(var(--body-glow) / 0.28), transparent 32rem),
+    radial-gradient(circle at 88% 78%, rgb(79 70 229 / 0.18), transparent 26rem);
 }
 
 .metric-number {
@@ -65,6 +124,28 @@ select {
 
 .scrollbar-none::-webkit-scrollbar {
   display: none;
+}
+
+.theme-surface {
+  background-color: rgb(var(--color-surface) / var(--surface-alpha));
+  border-color: rgb(var(--color-line));
+}
+
+.theme-control {
+  background-color: rgb(var(--color-surface) / var(--control-alpha));
+  border-color: rgb(var(--color-line));
+}
+
+input[type="checkbox"],
+input[type="radio"] {
+  accent-color: #14b8a6;
+}
+
+:root[data-theme="dark"] input:-webkit-autofill,
+:root[data-theme="dark"] input:-webkit-autofill:hover,
+:root[data-theme="dark"] input:-webkit-autofill:focus {
+  -webkit-text-fill-color: rgb(var(--color-ink));
+  box-shadow: 0 0 0 1000px rgb(var(--color-surface)) inset;
 }
 
 .animate-shell-content {

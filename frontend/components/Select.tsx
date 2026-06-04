@@ -159,7 +159,7 @@ export function Select({
       </button>
 
       {open && (
-        <div className="absolute top-full left-0 right-0 z-50 mt-1 rounded-app border border-white/80 bg-white shadow-lift overflow-hidden">
+        <div className="theme-surface absolute left-0 right-0 top-full z-50 mt-1 overflow-hidden rounded-app border shadow-lift">
           <div className="p-2 border-b border-line">
             <input
               ref={inputRef}
@@ -190,7 +190,7 @@ export function Select({
                   className={`w-full text-left px-3 py-2 text-sm flex items-center gap-2 transition ${
                     index === highlightedIndex
                       ? "bg-gradient-to-r from-pulse to-plum text-white"
-                      : "hover:bg-white/75 text-ink"
+                      : "text-ink hover:bg-pulse/10"
                   }`}
                   data-highlighted={index === highlightedIndex}
                   onClick={() => {

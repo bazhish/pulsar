@@ -6,10 +6,10 @@ type KpiCardProps = {
 };
 
 const toneClass = {
-  neutral: "border-white/80 from-white to-sky/5",
-  good: "border-leaf/20 from-white to-leaf/10",
-  warning: "border-amber/30 from-white to-amber/15",
-  danger: "border-coral/25 from-white to-coral/10"
+  neutral: "border-line from-surface to-sky/10",
+  good: "border-leaf/25 from-surface to-leaf/15",
+  warning: "border-amber/35 from-surface to-amber/20",
+  danger: "border-coral/30 from-surface to-coral/15"
 };
 
 const markerClass = {
