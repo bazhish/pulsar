@@ -44,7 +44,7 @@ jobs:
           ENVIRONMENT: testing
           ALLOWED_ORIGINS: http://localhost:8000
         run: pytest tests/ -q
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: "22"
           cache: npm
