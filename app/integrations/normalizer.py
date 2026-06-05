@@ -12,9 +12,12 @@ def normalize_duplicate_text(value: str) -> str:
     return re.sub(r"\s+", " ", value.strip().lower())
 
 
-def build_duplicate_hash(user_id: str, transaction_date: str, description: str, amount: Any) -> str:
+def build_duplicate_hash(user_id: str, transaction_date: str, description: str, amount: Any, transaction_type: str = "") -> str:
     amount_text = f"{round_money(amount):.2f}"
-    raw = "|".join([user_id, transaction_date, normalize_duplicate_text(description), amount_text])
+    parts = [user_id, transaction_date, normalize_duplicate_text(description), amount_text]
+    if transaction_type:
+        parts.append(transaction_type)
+    raw = "|".join(parts)
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 

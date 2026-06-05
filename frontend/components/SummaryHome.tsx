@@ -1,6 +1,7 @@
 "use client";
 
-import { CreditCard, PieChart as PieIcon, ReceiptText, Wallet } from "lucide-react";
+import Link from "next/link";
+import { BarChart3, FileUp, Layers3, PieChart as PieIcon, ReceiptText, Wallet } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { ActionRecommendationCard } from "@/components/ActionRecommendationCard";
 import { EmptyState } from "@/components/EmptyState";
@@ -50,7 +51,6 @@ export function SummaryHome({ data, chartsReady, onEditPlanning }: SummaryHomePr
   }));
   
   const hasBudget = Boolean(data?.budget.items.length);
-  const hasCards = Boolean(data?.cards.length);
   const chartGrid = effectiveTheme === "dark" ? "#2D3E55" : "#DDE7F0";
   const chartText = effectiveTheme === "dark" ? "#96A4B8" : "#6D7B8D";
   const tooltipStyle = {
@@ -66,7 +66,7 @@ export function SummaryHome({ data, chartsReady, onEditPlanning }: SummaryHomePr
         <MainInsightCard userName={data?.user.name} dashboard={dashboard} alert={data?.alerts[0]} />
         <div className="grid gap-4">
           <QuickSettingsCard settings={data?.settings || null} onEdit={onEditPlanning} />
-          <ActionRecommendationCard dashboard={dashboard} alerts={data?.alerts || []} hasBudget={hasBudget} hasCards={hasCards} transactions={data?.transactions || []} />
+          <ActionRecommendationCard dashboard={dashboard} alerts={data?.alerts || []} hasBudget={hasBudget} transactions={data?.transactions || []} />
         </div>
       </div>
 
@@ -125,7 +125,7 @@ export function SummaryHome({ data, chartsReady, onEditPlanning }: SummaryHomePr
           <SectionIntro
             title="Formas de pagamento"
             description="Entenda se seus gastos estão concentrados em Pix, débito, crédito ou dinheiro."
-            helpText="Use esse gráfico para perceber se o cartão ou outra forma de pagamento está pesando demais no mês."
+            helpText="Use esse gráfico para perceber se alguma forma de pagamento está pesando demais no mês."
           />
           {paymentData.length ? (
             <div className="space-y-4">
@@ -207,15 +207,21 @@ export function SummaryHome({ data, chartsReady, onEditPlanning }: SummaryHomePr
         </div>
       </section>
 
-      {!hasCards ? (
-        <EmptyState
-          title="Nenhum cartão cadastrado"
-          description="Cadastre um cartão para acompanhar fatura, limite disponível e parcelas futuras."
-          actionLabel="Cadastrar cartão"
-          href="/cartoes"
-          icon={CreditCard}
-        />
-      ) : null}
+      <section className="grid gap-3 md:grid-cols-3">
+        {[
+          { href: "/parcelas", icon: Layers3, title: "Simular compra parcelada", description: "Veja o impacto nos próximos meses antes de registrar uma compra." },
+          { href: "/importar", icon: FileUp, title: "Importar extrato CSV", description: "Traga movimentações do banco e revise tudo antes de confirmar." },
+          { href: "/relatorios", icon: BarChart3, title: "Ver relatório do mês", description: "Analise categorias, formas de pagamento e evolução mensal." }
+        ].map((action) => (
+          <Link className="app-card focus-ring p-4 transition hover:-translate-y-0.5 hover:border-pulse/50" href={action.href} key={action.href}>
+            <span className="flex h-10 w-10 items-center justify-center rounded-app bg-pulse/10 text-pulse">
+              <action.icon size={20} aria-hidden />
+            </span>
+            <strong className="mt-3 block text-sm text-ink">{action.title}</strong>
+            <span className="mt-1 block text-sm text-muted">{action.description}</span>
+          </Link>
+        ))}
+      </section>
     </div>
   );
 }

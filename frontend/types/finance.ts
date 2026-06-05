@@ -215,18 +215,22 @@ export type CsvPreview = {
   duplicates: Array<{
     line: number;
     transactionDate: string;
+    detectedMonth?: string;
     title: string;
     amount: number;
     type: TransactionType;
     duplicateHash: string;
+    legacyDuplicateHash?: string;
   }>;
   preview: Array<{
     line: number;
     transactionDate: string;
+    detectedMonth?: string;
     title: string;
     amount: number;
     type: TransactionType;
     duplicateHash: string;
+    legacyDuplicateHash?: string;
   }>;
   errors: Array<{ line: number; detail: string }>;
 };

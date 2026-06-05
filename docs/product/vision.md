@@ -6,7 +6,7 @@ Perguntas principais:
 
 - Quanto entrou e saiu no mes?
 - Quanto posso gastar hoje?
-- Minha fatura futura compromete o salario?
+- Minhas parcelas futuras comprometem o salario?
 - Quais categorias estao consumindo mais?
 - Estou construindo reserva?
 - O que precisa mudar para fechar o mes positivo?

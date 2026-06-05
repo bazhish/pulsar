@@ -195,6 +195,7 @@ export default function PerfilPage() {
       <div className="mx-auto max-w-5xl px-4 py-5 sm:py-6">
         <PageHeader
           description={user?.email || ""}
+          helpText="Gerencie seus dados, preferências, tema e configurações da conta."
           icon={UserRound}
           title="Ajustes da sua conta"
         />

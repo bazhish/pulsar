@@ -99,4 +99,4 @@ Use `render.yaml` como referência ou crie Web Service Docker/Python com as mesm
 
 ## Workers e estado
 
-Estado crítico (tokens revogados, PIN, import CSV) usa PostgreSQL quando disponível. O app está preparado para múltiplos workers; em escala, considere Redis para blocklist compartilhada.
+Estado crítico (tokens revogados, imports CSV e endpoints legados de cartao) usa PostgreSQL quando disponível. O app está preparado para múltiplos workers; em escala, considere Redis para blocklist compartilhada.

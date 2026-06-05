@@ -2,12 +2,20 @@ from __future__ import annotations
 
 import pytest
 
+from app.main import build_duplicate_hash, db_cursor
 from tests.conftest import TEST_DB_URL
 
 pytestmark = pytest.mark.skipif(not TEST_DB_URL, reason="TEST_DATABASE_URL is not configured")
 
 
 CSV_CONTENT = "data;descricao;valor;tipo\n2024-05-01;Salario;3000;entrada\n02/05/2024;Mercado;-125,50;saida\n"
+CSV_MIXED_NO_TYPE = (
+    "data;descricao;valor\n"
+    "2026-06-01;Salario;R$ 3.000,00\n"
+    "01/07/2026;Mercado;R$ -100,00\n"
+    "01-08-2026;Freela;1.250,90\n"
+    "02/08/2026;Aluguel;-1.250,90\n"
+)
 
 
 async def upload_preview_confirm(client, auth_headers):
@@ -32,6 +40,7 @@ async def upload_preview_confirm(client, auth_headers):
     assert preview["duplicateRows"] == 0
     assert preview["preview"][1]["amount"] == 125.5
     assert preview["preview"][1]["type"] == "expense"
+    assert preview["preview"][1]["detectedMonth"] == "2024-05"
 
     confirm_response = await client.post("/api/imports/csv/confirm", headers=auth_headers, json=payload)
     assert confirm_response.status_code == 200, confirm_response.text
@@ -77,6 +86,47 @@ async def test_csv_preview_reports_existing_duplicates_before_confirm(client, au
 
 
 @pytest.mark.asyncio
+async def test_csv_import_detects_legacy_duplicate_hashes(client, auth_headers):
+    me_response = await client.get("/api/auth/me", headers=auth_headers)
+    assert me_response.status_code == 200, me_response.text
+    user_id = me_response.json()["id"]
+    legacy_hash = build_duplicate_hash(user_id, "2024-05-01", "Salario", 3000)
+
+    with db_cursor(commit=True) as cursor:
+        cursor.execute(
+            """
+            INSERT INTO transactions
+              (user_id, title, amount, type, payment_method, transaction_date, source, external_id,
+               imported_at, raw_description, duplicate_hash)
+            VALUES (%s, 'Salario', 3000, 'income', 'csv_import', '2024-05-01', 'csv_import', %s,
+                    NOW(), 'Salario', %s)
+            """,
+            (user_id, legacy_hash, legacy_hash),
+        )
+
+    upload_response = await client.post(
+        "/api/imports/csv/upload",
+        headers=auth_headers,
+        files={"file": ("extrato.csv", CSV_CONTENT.encode("utf-8"), "text/csv")},
+    )
+    assert upload_response.status_code == 200, upload_response.text
+    payload = {
+        "importToken": upload_response.json()["importToken"],
+        "mapping": {"date": "data", "description": "descricao", "value": "valor", "type": "tipo"},
+    }
+
+    preview_response = await client.post("/api/imports/csv/preview", headers=auth_headers, json=payload)
+    assert preview_response.status_code == 200, preview_response.text
+    assert preview_response.json()["duplicateRows"] == 1
+
+    confirm_response = await client.post("/api/imports/csv/confirm", headers=auth_headers, json=payload)
+    assert confirm_response.status_code == 200, confirm_response.text
+    result = confirm_response.json()
+    assert result["duplicates"] == 1
+    assert result["imported"] == 1
+
+
+@pytest.mark.asyncio
 async def test_csv_import_rejects_wrong_extension(client, auth_headers):
     response = await client.post(
         "/api/imports/csv/upload",
@@ -84,3 +134,38 @@ async def test_csv_import_rejects_wrong_extension(client, auth_headers):
         files={"file": ("extrato.txt", CSV_CONTENT.encode("utf-8"), "text/csv")},
     )
     assert response.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_csv_import_infers_type_and_preserves_original_dates(client, auth_headers):
+    upload_response = await client.post(
+        "/api/imports/csv/upload",
+        headers=auth_headers,
+        files={"file": ("extrato.csv", CSV_MIXED_NO_TYPE.encode("utf-8"), "text/csv")},
+    )
+    assert upload_response.status_code == 200, upload_response.text
+    upload = upload_response.json()
+    payload = {
+        "importToken": upload["importToken"],
+        "mapping": {"date": "data", "description": "descricao", "value": "valor", "type": None},
+    }
+
+    preview_response = await client.post("/api/imports/csv/preview", headers=auth_headers, json=payload)
+    assert preview_response.status_code == 200, preview_response.text
+    preview = preview_response.json()
+    assert [(row["transactionDate"], row["detectedMonth"], row["type"], row["amount"]) for row in preview["preview"]] == [
+        ("2026-06-01", "2026-06", "income", 3000.0),
+        ("2026-07-01", "2026-07", "expense", 100.0),
+        ("2026-08-01", "2026-08", "income", 1250.9),
+        ("2026-08-02", "2026-08", "expense", 1250.9),
+    ]
+
+    confirm_response = await client.post("/api/imports/csv/confirm", headers=auth_headers, json=payload)
+    assert confirm_response.status_code == 200, confirm_response.text
+    transactions = confirm_response.json()["transactions"]
+    assert [(row["transaction_date"], row["type"], row["amount"]) for row in transactions] == [
+        ("2026-06-01", "income", 3000.0),
+        ("2026-07-01", "expense", 100.0),
+        ("2026-08-01", "income", 1250.9),
+        ("2026-08-02", "expense", 1250.9),
+    ]

@@ -1,19 +1,17 @@
 import Link from "next/link";
-import { ArrowRight, CreditCard, FileUp, PiggyBank, ReceiptText, TrendingUp } from "lucide-react";
+import { ArrowRight, FileUp, PiggyBank, ReceiptText, TrendingUp } from "lucide-react";
 import type { Alert, Dashboard, Transaction } from "@/types/finance";
 
 type ActionRecommendationCardProps = {
   dashboard?: Dashboard | null;
   alerts: Alert[];
   hasBudget: boolean;
-  hasCards: boolean;
   transactions?: Transaction[];
 };
 
 export function ActionRecommendationCard({ 
   dashboard, 
   hasBudget, 
-  hasCards,
   transactions = []
 }: ActionRecommendationCardProps) {
   const salaryBase = dashboard?.salaryBase || 0;
@@ -53,14 +51,6 @@ export function ActionRecommendationCard({
     description = "Defina limites por categoria para controlar melhor seus gastos.";
     Icon = PiggyBank;
   }
-  // Priority 5: Add card
-  else if (!hasCards) {
-    href = "/cartoes";
-    label = "Cadastrar cartão";
-    description = "Registre seus cartões para acompanhar faturas e limites disponíveis.";
-    Icon = CreditCard;
-  }
-  // Priority 6: View report
   else {
     href = "/relatorios";
     label = "Ver relatório do mês";

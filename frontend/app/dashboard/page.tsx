@@ -48,9 +48,11 @@ export default function DashboardPage() {
         <PageHeader
           actions={<MonthPicker value={month} onChange={setMonth} />}
           description="O essencial do seu mês em uma tela limpa."
+          helpText="Mostra a visão rápida do seu mês: quanto entrou, quanto saiu, saldo previsto e quanto você pode gastar hoje."
           media={
-            <div className="rounded-app bg-white/80 p-2 shadow-soft">
-              <Image src="/logo.svg" alt="Pulsar" width={180} height={50} priority />
+            <div className="theme-control rounded-app border p-2 shadow-soft">
+              <Image className="dark:hidden" src="/logo.svg" alt="Pulsar" width={180} height={50} priority />
+              <Image className="hidden dark:block" src="/logo-dark.svg" alt="Pulsar" width={180} height={50} priority />
             </div>
           }
           title="Resumo"

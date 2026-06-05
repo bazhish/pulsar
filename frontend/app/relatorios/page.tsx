@@ -144,6 +144,7 @@ export default function RelatoriosPage() {
         <PageHeader
           actions={<MonthPicker value={month} onChange={setMonth} />}
           description="Analise o mês com calma, compare evolução e exporte uma versão profissional."
+          helpText="Gere análises do mês, exporte CSV/PDF e entenda onde seu dinheiro está indo."
           icon={FileText}
           title="Relatórios"
         />
@@ -276,7 +277,7 @@ export default function RelatoriosPage() {
           <SectionIntro
             title="Alertas principais"
             description="Pontos do mês que merecem revisão antes de fechar o planejamento."
-            helpText="Alertas usam cartões, orçamento, categorias e projeções do mês."
+            helpText="Alertas usam orçamento, categorias, parcelas e projeções do mês."
           />
           <div className="grid gap-2 md:grid-cols-2">
             {(report?.alerts || []).slice(0, 4).map((alert, index) => (

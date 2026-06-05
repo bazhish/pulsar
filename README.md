@@ -35,10 +35,10 @@ Instruções para gerar screenshots: [docs/assets/README.md](docs/assets/README.
 ## Funcionalidades
 
 - **Gasto diário** — “Quanto posso gastar hoje” com meta e ritmo do mês
-- **Transações** — criar, editar, filtrar por categoria, cartão e origem
+- **Transações** — criar, editar, filtrar por categoria, forma de pagamento e origem
 - **Metas diárias** — calendário visual e projeção
 - **Orçamento** — por categoria, alertas e cópia do mês anterior
-- **Cartões e parcelas** — limite, fatura, simulação e PIN
+- **Parcelas** — simulação e projeção de compras parceladas
 - **Reserva** — meta e saldo de emergência
 - **Importação CSV** — mapeamento, prévia e deduplicação
 - **Relatórios** — exportação CSV/PDF e resumo mensal

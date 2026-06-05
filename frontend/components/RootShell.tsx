@@ -4,7 +4,6 @@ import { usePathname } from "next/navigation";
 import { AppShell } from "@/components/AppShell";
 
 const appRoutes = [
-  "/cartoes",
   "/dashboard",
   "/importar",
   "/metas",

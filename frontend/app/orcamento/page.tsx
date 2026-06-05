@@ -1,9 +1,8 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useState } from "react";
-import { Copy, HelpCircle, PiggyBank, Plus } from "lucide-react";
+import { Copy, PiggyBank, Plus } from "lucide-react";
 import { BudgetCategoryCard } from "@/components/BudgetCategoryCard";
-import { BudgetHelpModal } from "@/components/BudgetHelpModal";
 import { EmptyState } from "@/components/EmptyState";
 import { FirstTimeExplainer } from "@/components/FirstTimeExplainer";
 import { KpiCard } from "@/components/KpiCard";
@@ -31,7 +30,6 @@ export default function OrcamentoPage() {
   const [categoryId, setCategoryId] = useState("");
   const [plannedAmount, setPlannedAmount] = useState(0);
   const [message, setMessage] = useState("");
-  const [showHelpModal, setShowHelpModal] = useState(false);
 
   const load = useCallback(async () => {
     if (!token) return;
@@ -66,20 +64,10 @@ export default function OrcamentoPage() {
       <div className="mx-auto max-w-6xl px-4 py-5 sm:py-6">
         <PageHeader
           actions={
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setShowHelpModal(true)}
-                className="btn-secondary"
-                aria-label="Como funciona o orçamento?"
-              >
-                <HelpCircle size={16} />
-                Como funciona?
-              </button>
-              <MonthPicker value={month} onChange={setMonth} />
-            </div>
+            <MonthPicker value={month} onChange={setMonth} />
           }
           description="Defina limites para cada categoria e acompanhe seus gastos."
+          helpText="Defina limites por categoria para saber quando está perto de gastar demais."
           icon={PiggyBank}
           title="Orçamento"
         />
@@ -89,8 +77,6 @@ export default function OrcamentoPage() {
           title="Orçamento ajuda você a gastar melhor"
           description="Defina limites por categoria e o app avisa quando você está perto de gastar demais. Assim você mantém as despesas sob controle."
         />
-
-        <BudgetHelpModal open={showHelpModal} onClose={() => setShowHelpModal(false)} />
 
         {message ? <p className="app-card mb-4 p-3 text-sm text-ink">{message}</p> : null}
 

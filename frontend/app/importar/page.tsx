@@ -133,7 +133,7 @@ export default function ImportarPage() {
   useEffect(() => {
     if (!token) return;
     api.bootstrap(token, new Date().toISOString().slice(0, 7))
-      .then((boot) => setCategories(boot.categories.filter((category) => category.type === "expense")))
+      .then((boot) => setCategories(boot.categories))
       .catch((err) => setMessage(err instanceof Error ? err.message : "Falha ao carregar categorias."));
   }, [token]);
 
@@ -246,6 +246,7 @@ export default function ImportarPage() {
       <div className="mx-auto max-w-6xl px-4 py-5 sm:py-6">
         <PageHeader
           description="Você pode enviar um arquivo CSV do seu banco. O Pulsar lê as movimentações, mostra uma prévia e você decide o que importar."
+          helpText="Importe um extrato em CSV para cadastrar movimentações mais rápido. Você revisa tudo antes de confirmar."
           icon={FileUp}
           title="Importe seu extrato para cadastrar movimentações mais rápido."
         />
@@ -375,7 +376,7 @@ export default function ImportarPage() {
                       <div key={row.duplicateHash} className="flex items-center justify-between gap-3 p-3">
                         <div className="min-w-0">
                           <strong className="block truncate text-sm">{row.title}</strong>
-                          <span className="text-xs text-muted">{row.transactionDate} / linha {row.line} / {row.type === "income" ? "Entrada" : "Despesa"}</span>
+                          <span className="text-xs text-muted">{row.transactionDate} / mês {row.detectedMonth || row.transactionDate.slice(0, 7)} / linha {row.line} / {row.type === "income" ? "Entrada" : "Despesa"}</span>
                         </div>
                         <span className={row.type === "income" ? "font-semibold text-leaf" : "font-semibold text-coral"}>{formatBRL(row.amount)}</span>
                       </div>
@@ -459,7 +460,7 @@ export default function ImportarPage() {
                         value={transaction.category_id ? String(transaction.category_id) : ""}
                       >
                         <option value="">Categorizar</option>
-                        {categories.map((category) => (
+                        {categories.filter((category) => category.type === transaction.type).map((category) => (
                           <option key={category.id} value={category.id}>{category.name}</option>
                         ))}
                       </select>

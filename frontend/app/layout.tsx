@@ -7,7 +7,8 @@ export const metadata: Metadata = {
   title: "Pulsar — finanças no ritmo certo",
   description: "Controle salário, despesas, metas e parcelas em um só lugar",
   icons: {
-    icon: "/logo-mark.svg"
+    icon: "/favicon.svg",
+    apple: "/apple-touch-icon.svg"
   }
 };
 

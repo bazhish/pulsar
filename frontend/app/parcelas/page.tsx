@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useState } from "react";
-import { AlertCircle, Calculator, Plus, TrendingUp } from "lucide-react";
+import { Calculator, Plus, TrendingUp } from "lucide-react";
 import { EmptyState } from "@/components/EmptyState";
 import { FirstTimeExplainer } from "@/components/FirstTimeExplainer";
 import { MoneyInput } from "@/components/MoneyInput";
@@ -104,6 +104,7 @@ export default function ParcelasPage() {
         <PageHeader
           actions={<MonthPicker value={month} onChange={setMonth} />}
           description="Simule e controle compras parceladas para entender o impacto no seu orçamento."
+          helpText="Simule e registre compras parceladas sem cadastrar cartão. Veja o impacto nos próximos meses. O Pulsar não pede número do cartão nem CVV."
           icon={TrendingUp}
           title="Parcelas"
         />
@@ -113,18 +114,6 @@ export default function ParcelasPage() {
           title="Simule antes de comprar"
           description="Use o simulador para ver como uma compra parcelada afeta seus próximos meses. Depois salve no seu controle de parcelas."
         />
-
-        <div className="app-card mb-4 border border-leaf/30 bg-leaf/5 p-4">
-          <div className="flex items-start gap-3">
-            <AlertCircle className="mt-0.5 h-5 w-5 text-leaf" />
-            <div className="text-sm">
-              <p className="font-semibold text-ink">Seus dados estão seguros 🔒</p>
-              <p className="mt-1 text-muted">
-                O Pulsar <strong>não pede</strong> número de cartão, CVV, nem dados bancários. Use este simulador apenas para planejar o impacto das parcelas no seu orçamento.
-              </p>
-            </div>
-          </div>
-        </div>
 
         {message ? <p className="app-card mb-4 p-3 text-sm text-ink">{message}</p> : null}
 
@@ -209,7 +198,7 @@ export default function ParcelasPage() {
           <section className="app-card mt-4 p-4">
             <SectionIntro
               title="Impacto nos próximos meses"
-              description="Veja como a parcela apareceria em cada mês e o total projetado da sua fatura."
+              description="Veja como a parcela apareceria em cada mês e o compromisso projetado."
               helpText="Use isso para decidir se a compra cabe no seu orçamento. Se ficar vermelho (em atenção/estourado), pense bem antes de comprar."
             />
             <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
@@ -218,7 +207,7 @@ export default function ParcelasPage() {
                   <strong className="block">{item.month}</strong>
                   <span className="mt-1 block text-xs text-muted">Parcela</span>
                   <span className="block font-semibold text-leaf">{formatBRL(item.simulatedInstallment)}</span>
-                  <span className="mt-2 block text-xs text-muted">Total fatura (estimado)</span>
+                  <span className="mt-2 block text-xs text-muted">Compromisso estimado</span>
                   <span className="block font-semibold">{formatBRL(item.projectedTotal)}</span>
                 </div>
               ))}

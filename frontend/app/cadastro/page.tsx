@@ -59,13 +59,9 @@ export default function CadastroPage() {
         )}
       </button>
 
-      <div className="mx-auto grid w-full max-w-6xl gap-8 lg:grid-cols-[0.85fr_1.15fr] lg:items-center">
-        <section className="order-1 mx-auto w-full max-w-md lg:order-1">
-          <div className="lg:hidden">
-            <AuthBrand />
-          </div>
-
-          <form onSubmit={handleSubmit} className="glass-panel p-5 md:p-6">
+      <div className="glass-panel mx-auto grid w-full max-w-6xl overflow-hidden lg:grid-cols-[0.95fr_1.05fr]">
+        <section className="order-1 mx-auto w-full max-w-md p-5 lg:order-1 lg:p-7">
+          <form onSubmit={handleSubmit}>
             <p className="text-sm font-bold text-pulse">Comece no Pulsar</p>
             <h1 className="mt-1 text-2xl font-black leading-tight text-ink">Monte seu ritmo financeiro</h1>
             <p className="mt-2 text-sm text-muted">Crie sua conta e organize salário, metas e parcelas com clareza.</p>
@@ -108,21 +104,21 @@ export default function CadastroPage() {
             </Link>
           </form>
 
-          <div className="mt-4 lg:hidden">
-            <AuthBenefits compact />
-          </div>
         </section>
 
-        <section className="order-2 hidden lg:order-2 lg:block">
+        <section className="order-2 border-t border-line/70 p-5 lg:order-2 lg:border-l lg:border-t-0 lg:p-7">
           <AuthBrand />
           <p className="mt-5 max-w-xl text-sm text-muted">
             Controle salário, despesas, metas e parcelas em um só lugar. Comece com uma visão prática do app.
           </p>
-          <div className="mt-6">
+          <div className="mt-6 hidden lg:block">
             <AuthProductDemo />
           </div>
+          <div className="mt-4 lg:hidden">
+            <AuthProductDemo compact />
+          </div>
           <div className="mt-5">
-            <AuthBenefits />
+            <AuthBenefits compact />
           </div>
         </section>
       </div>

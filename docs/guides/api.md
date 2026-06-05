@@ -19,12 +19,9 @@ Rotas principais:
 - `GET /api/budgets`
 - `POST /api/budgets`
 - `POST /api/budgets/copy`
-- `GET /api/cards`
-- `POST /api/cards`
-- `PUT /api/cards/{id}`
-- `DELETE /api/cards/{id}`
-- `POST /api/cards/{id}/installments`
-- `POST /api/cards/{id}/purchase-simulation`
+- `POST /api/installments/simulate`
+- `POST /api/installments`
+- `GET /api/installments/future`
 - `POST /api/imports/csv/upload`
 - `POST /api/imports/csv/preview`
 - `POST /api/imports/csv/confirm`
@@ -41,3 +38,16 @@ Filtros de transacao:
 - `source`
 - `cardId`
 - `search`
+
+## Endpoints legados de cartão
+
+Os endpoints abaixo permanecem por compatibilidade técnica e testes históricos, mas não fazem parte da experiência do usuário:
+
+- `GET /api/cards`
+- `POST /api/cards`
+- `PUT /api/cards/{id}`
+- `DELETE /api/cards/{id}`
+- `POST /api/cards/{id}/installments`
+- `POST /api/cards/{id}/purchase-simulation`
+
+Novas telas devem usar `Parcelas` e os endpoints sem cadastro de cartão.

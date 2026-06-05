@@ -38,6 +38,10 @@ function providerIcon(provider: OAuthProviderKey) {
   return <Github size={16} />;
 }
 
+function unavailableMessage(provider: OAuthProviderKey) {
+  return `Login com ${providerLabels[provider]} ainda não configurado neste ambiente.`;
+}
+
 type SocialLoginButtonsProps = {
   mode?: "login" | "register";
 };
@@ -92,11 +96,8 @@ export function SocialLoginButtons({ mode = "login" }: SocialLoginButtonsProps) 
             type="button"
             className="btn-secondary w-full text-xs disabled:cursor-not-allowed disabled:opacity-50"
             disabled={loading || !entry.enabled}
-            title={
-              entry.enabled
-                ? undefined
-                : "Configure as variáveis OAuth no servidor para habilitar este provedor."
-            }
+            title={entry.enabled ? undefined : unavailableMessage(entry.key)}
+            aria-label={entry.enabled ? `Entrar com ${entry.label}` : unavailableMessage(entry.key)}
             onClick={() => startOAuth(entry.key)}
           >
             {providerIcon(entry.key)}
@@ -107,7 +108,7 @@ export function SocialLoginButtons({ mode = "login" }: SocialLoginButtonsProps) 
 
       {!loading && !anyEnabled ? (
         <p className="mt-2 text-center text-xs text-muted">
-          {hint || "Login social não configurado. Use e-mail e senha ou peça ao administrador para configurar OAuth."}
+          {hint || "Login social não configurado neste ambiente. Use e-mail e senha ou peça ao administrador para configurar OAuth."}
         </p>
       ) : null}
 

@@ -476,9 +476,12 @@ def normalize_duplicate_text(value: str) -> str:
     return re.sub(r"\s+", " ", value.strip().lower())
 
 
-def build_duplicate_hash(user_id: str, transaction_date: str, description: str, amount: Any) -> str:
+def build_duplicate_hash(user_id: str, transaction_date: str, description: str, amount: Any, transaction_type: str = "") -> str:
     amount_text = f"{round_money(amount):.2f}"
-    raw = "|".join([user_id, transaction_date, normalize_duplicate_text(description), amount_text])
+    parts = [user_id, transaction_date, normalize_duplicate_text(description), amount_text]
+    if transaction_type:
+        parts.append(transaction_type)
+    raw = "|".join(parts)
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
@@ -2856,16 +2859,19 @@ def build_csv_import_preview(user_id: str, session: dict, mapping: CsvColumnMapp
             amount = round_money(abs(signed_amount))
             if amount <= 0:
                 raise ValueError("Valor precisa ser maior que zero.")
-            duplicate_hash = build_duplicate_hash(user_id, transaction_date, description, amount)
+            duplicate_hash = build_duplicate_hash(user_id, transaction_date, description, amount, transaction_type)
+            legacy_duplicate_hash = build_duplicate_hash(user_id, transaction_date, description, amount)
             parsed_rows.append(
                 {
                     "line": index,
                     "transactionDate": transaction_date,
+                    "detectedMonth": month_key_from_date(transaction_date),
                     "title": description,
                     "rawDescription": row.get(mapping.description, ""),
                     "amount": amount,
                     "type": transaction_type,
                     "duplicateHash": duplicate_hash,
+                    "legacyDuplicateHash": legacy_duplicate_hash,
                 }
             )
         except (ValueError, HTTPException) as exc:
@@ -2873,7 +2879,14 @@ def build_csv_import_preview(user_id: str, session: dict, mapping: CsvColumnMapp
             errors_list.append({"line": index, "detail": detail})
 
     if parsed_rows:
-        duplicate_hashes = [row["duplicateHash"] for row in parsed_rows]
+        duplicate_hashes = sorted(
+            {
+                candidate
+                for row in parsed_rows
+                for candidate in (row["duplicateHash"], row.get("legacyDuplicateHash"))
+                if candidate
+            }
+        )
         with db_cursor() as cursor:
             cursor.execute(
                 """
@@ -2884,7 +2897,11 @@ def build_csv_import_preview(user_id: str, session: dict, mapping: CsvColumnMapp
                 (user_id, duplicate_hashes),
             )
             existing_hashes = {row["duplicate_hash"] for row in normalize_rows(cursor.fetchall())}
-        duplicate_rows = [row for row in parsed_rows if row["duplicateHash"] in existing_hashes]
+        duplicate_rows = [
+            row
+            for row in parsed_rows
+            if row["duplicateHash"] in existing_hashes or row.get("legacyDuplicateHash") in existing_hashes
+        ]
 
     return {
         "importToken": session["token"],
@@ -3316,10 +3333,13 @@ def confirm_csv_import(payload: CsvImportConfirmPayload, current_user: dict = De
                 """
                 SELECT id
                 FROM transactions
-                WHERE user_id = %s AND duplicate_hash = %s
+                WHERE user_id = %s AND duplicate_hash = ANY(%s)
                 LIMIT 1
                 """,
-                (user_id, row["duplicateHash"]),
+                (
+                    user_id,
+                    [candidate for candidate in (row["duplicateHash"], row.get("legacyDuplicateHash")) if candidate],
+                ),
             )
             if cursor.fetchone():
                 duplicates.append(row)
@@ -4357,6 +4377,7 @@ def export_pdf(request: Request, month: Optional[str] = None, current_user: dict
     )
 
 
+# Deprecated compatibility endpoints. The current frontend uses Parcelas and does not expose card registration.
 @app.post("/api/cards")
 def create_card(payload: CardPayload, current_user: dict = Depends(get_current_user)) -> dict:
     user_id = current_user["id"]

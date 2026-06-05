@@ -49,30 +49,25 @@ export default function LoginPage() {
         )}
       </button>
 
-      <div className="mx-auto grid w-full max-w-6xl gap-8 lg:grid-cols-[1.15fr_0.85fr] lg:items-center">
-        <section className="order-2 hidden lg:order-1 lg:block">
+      <div className="glass-panel mx-auto grid w-full max-w-6xl overflow-hidden lg:grid-cols-[1.05fr_0.95fr]">
+        <section className="order-2 border-t border-line/70 p-5 lg:order-1 lg:border-r lg:border-t-0 lg:p-7">
           <AuthBrand />
           <p className="mt-5 max-w-xl text-sm text-muted">
             Controle salário, despesas, metas e parcelas em um só lugar. Veja o que importa antes de entrar.
           </p>
-          <div className="mt-6">
+          <div className="mt-6 hidden lg:block">
             <AuthProductDemo />
           </div>
+          <div className="mt-4 lg:hidden">
+            <AuthProductDemo compact />
+          </div>
           <div className="mt-5">
-            <AuthBenefits />
+            <AuthBenefits compact />
           </div>
         </section>
 
-        <section className="order-1 mx-auto w-full max-w-md lg:order-2">
-          <div className="lg:hidden">
-            <AuthBrand />
-          </div>
-
-          <div className="mb-4 lg:hidden">
-            <AuthProductDemo compact />
-          </div>
-
-          <form onSubmit={handleSubmit} className="glass-panel p-5 md:p-6">
+        <section className="order-1 mx-auto w-full max-w-md p-5 lg:order-2 lg:p-7">
+          <form onSubmit={handleSubmit}>
             <p className="text-sm font-bold text-pulse">Entre no Pulsar</p>
             <h1 className="mt-1 text-2xl font-black leading-tight text-ink">Acompanhe o pulso do seu mês</h1>
             <p className="mt-2 text-sm text-muted">Saiba quanto pode gastar hoje e mantenha metas no ritmo certo.</p>
@@ -100,9 +95,6 @@ export default function LoginPage() {
             </Link>
           </form>
 
-          <div className="mt-4 lg:hidden">
-            <AuthBenefits compact />
-          </div>
         </section>
       </div>
     </main>

@@ -8,6 +8,7 @@ const config: Config = {
         ink: "rgb(var(--color-ink) / <alpha-value>)",
         paper: "rgb(var(--color-paper) / <alpha-value>)",
         surface: "rgb(var(--color-surface) / <alpha-value>)",
+        "surface-muted": "rgb(var(--color-surface-muted) / <alpha-value>)",
         muted: "rgb(var(--color-muted) / <alpha-value>)",
         line: "rgb(var(--color-line) / <alpha-value>)",
         leaf: "#18A957",

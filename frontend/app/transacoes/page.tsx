@@ -5,6 +5,7 @@ import { ArrowDownCircle, ArrowUpCircle, Pencil, Plus, ReceiptText, Trash2 } fro
 import { EmptyState } from "@/components/EmptyState";
 import { ExpenseForm, type MovementFormState } from "@/components/ExpenseForm";
 import { FirstTimeExplainer } from "@/components/FirstTimeExplainer";
+import { IconButton } from "@/components/IconButton";
 import { IncomeForm } from "@/components/IncomeForm";
 import { MovementTabs } from "@/components/MovementTabs";
 import { MonthPicker } from "@/components/MonthPicker";
@@ -136,7 +137,7 @@ export default function TransacoesPage() {
   async function handleDelete(item: Transaction) {
     if (!token) return;
     const confirmDelete = window.confirm(
-      item.type === "expense" && (form.installments ?? 1) > 1
+      item.type === "expense" && (item.total_installments ?? 1) > 1
         ? `Excluir "${item.title}"? Como esta compra é parcelada, todas as parcelas também serão removidas.`
         : `Excluir "${item.title}"?`
     );
@@ -177,6 +178,7 @@ export default function TransacoesPage() {
         <PageHeader
           actions={<MonthPicker value={month} onChange={(value) => { setMonth(value); setForm(emptyForm(value, form.type)); }} />}
           description="Separe entradas e despesas sem precisar entender termos técnicos."
+          helpText="Cadastre entradas e despesas para acompanhar seu fluxo financeiro. Use categorias e formas de pagamento para entender seus hábitos."
           icon={ReceiptText}
           title="Movimentações"
         />
@@ -319,24 +321,8 @@ export default function TransacoesPage() {
                       {item.type === "income" ? "+" : "-"}
                       {formatBRL(item.amount)}
                     </strong>
-                    <button
-                      className="btn-secondary h-9 w-9 px-0"
-                      type="button"
-                      onClick={() => edit(item)}
-                      aria-label={`Editar ${item.title}`}
-                      title="Editar"
-                    >
-                      <Pencil size={15} />
-                    </button>
-                    <button
-                      className="btn-secondary h-9 w-9 px-0"
-                      type="button"
-                      onClick={() => handleDelete(item).catch(console.error)}
-                      aria-label={`Excluir ${item.title}`}
-                      title="Excluir"
-                    >
-                      <Trash2 size={15} />
-                    </button>
+                    <IconButton icon={Pencil} label={`Editar ${item.type === "income" ? "entrada" : "despesa"} ${item.title}`} onClick={() => edit(item)} />
+                    <IconButton icon={Trash2} label={`Excluir ${item.type === "income" ? "entrada" : "despesa"} ${item.title}`} onClick={() => handleDelete(item).catch(console.error)} />
                   </div>
                 </article>
               ))}

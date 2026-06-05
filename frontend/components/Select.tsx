@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useId } from "react";
 import { ChevronDown, X } from "lucide-react";
 
 type SelectOption = {
@@ -37,6 +37,7 @@ export function Select({
   const [open, setOpen] = useState(false);
   const [searchValue, setSearchValue] = useState("");
   const [highlightedIndex, setHighlightedIndex] = useState(0);
+  const descriptionId = useId();
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
@@ -114,7 +115,7 @@ export function Select({
   }, [highlightedIndex, open]);
 
   return (
-    <div className={`relative ${className}`} ref={containerRef}>
+    <div className={`relative ${open ? "z-[80]" : ""} ${className}`} ref={containerRef}>
       <button
         type="button"
         disabled={disabled}
@@ -128,7 +129,7 @@ export function Select({
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-label={aria.label || placeholder}
-        aria-describedby={aria.description ? "select-description" : undefined}
+        aria-describedby={aria.description ? descriptionId : undefined}
       >
         <div className="flex items-center gap-2 min-w-0 flex-1">
           {selectedOption?.icon && <span className="shrink-0">{selectedOption.icon}</span>}
@@ -159,7 +160,7 @@ export function Select({
       </button>
 
       {open && (
-        <div className="theme-surface absolute left-0 right-0 top-full z-50 mt-1 overflow-hidden rounded-app border shadow-lift">
+        <div className="theme-surface absolute left-0 right-0 top-full z-[80] mt-1 overflow-hidden rounded-app border shadow-lift">
           <div className="p-2 border-b border-line">
             <input
               ref={inputRef}
@@ -223,7 +224,7 @@ export function Select({
       )}
 
       {aria.description && (
-        <p id="select-description" className="text-xs text-muted mt-1">
+        <p id={descriptionId} className="text-xs text-muted mt-1">
           {aria.description}
         </p>
       )}

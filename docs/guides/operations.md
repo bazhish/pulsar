@@ -66,7 +66,7 @@ DB fora do ar:
 - Cadastro: 3 tentativas por hora.
 - Troca de senha: 3 tentativas por hora.
 - Export CSV/PDF: 20 requisicoes por hora.
-- PIN de cartao: bloqueio apos tentativas erradas dentro da janela configurada.
+- Endpoints legados de cartao: bloqueio por PIN continua ativo para compatibilidade.
 
 Token invalido:
 - Peça para o usuario sair e entrar novamente.

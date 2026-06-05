@@ -45,6 +45,7 @@ export default function MetasPage() {
         <PageHeader
           actions={<MonthPicker value={month} onChange={setMonth} />}
           description={goal?.riskAlert || "Acompanhe seu ritmo dia a dia."}
+          helpText="Ajuda a acompanhar quanto você pode gastar por dia para fechar o mês dentro do planejado."
           icon={CalendarDays}
           title="Metas diárias"
         />

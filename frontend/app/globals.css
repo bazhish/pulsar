@@ -6,8 +6,13 @@
   --color-ink: 16 32 51;
   --color-paper: 243 247 251;
   --color-surface: 255 255 255;
+  --color-surface-muted: 235 242 248;
   --color-muted: 109 123 141;
   --color-line: 221 231 240;
+  --color-success: 24 169 87;
+  --color-danger: 225 75 90;
+  --color-warning: 242 184 75;
+  --color-info: 47 128 237;
   --shadow-ink: 16 32 51;
   --shadow-soft-opacity: 0.08;
   --shadow-lift-opacity: 0.16;
@@ -26,8 +31,13 @@
   --color-ink: 232 239 247;
   --color-paper: 7 14 25;
   --color-surface: 14 27 45;
+  --color-surface-muted: 22 38 60;
   --color-muted: 150 164 184;
   --color-line: 45 62 85;
+  --color-success: 54 211 120;
+  --color-danger: 255 112 126;
+  --color-warning: 255 205 92;
+  --color-info: 98 162 255;
   --shadow-ink: 0 0 0;
   --shadow-soft-opacity: 0.22;
   --shadow-lift-opacity: 0.36;
@@ -57,7 +67,8 @@ html {
 
 button,
 input,
-select {
+select,
+textarea {
   font: inherit;
 }
 
@@ -91,6 +102,11 @@ select {
 .field {
   @apply focus-ring min-h-11 w-full rounded-app border border-line bg-surface px-3 py-2 text-sm text-ink shadow-sm transition placeholder:text-muted/70 hover:border-pulse/50;
   background-color: rgb(var(--color-surface) / var(--control-alpha));
+}
+
+.field option {
+  background: rgb(var(--color-surface));
+  color: rgb(var(--color-ink));
 }
 
 .app-card {
