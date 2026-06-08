@@ -48,6 +48,7 @@ artifacts/
 # Generated reports (keep intentional examples under docs/examples/)
 *.pdf
 *.csv
+*.docx
 !docs/examples/**/*.csv
 
 # OS
