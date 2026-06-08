@@ -29,10 +29,10 @@ export function Sidebar({ compact = false, expandedWidth = 280, onResizeKeyDown,
     >
       <div className={`flex min-h-0 flex-1 flex-col overflow-y-auto px-3 py-4 ${compact ? "items-center" : ""}`}>
         <div className={`mb-6 flex w-full items-center gap-2 ${compact ? "justify-center" : "justify-between"}`}>
-          <Tooltip disabled={!compact} label="Pulsa" side="right">
+          <Tooltip disabled={!compact} label="Pulsar" side="right">
             <Link
               aria-label={compact ? "Ir para o Resumo" : undefined}
-              className={`focus-ring interactive-card flex min-w-0 items-center gap-3 rounded-app border border-line bg-gradient-to-br from-mint/85 to-surface p-2 shadow-sm ${compact ? "justify-center" : "flex-1"}`}
+              className={`focus-ring interactive-card flex min-w-0 items-center gap-3 rounded-app border border-line bg-gradient-to-br from-pulse/10 to-surface p-2 shadow-sm ${compact ? "justify-center" : "flex-1"}`}
               href="/dashboard"
             >
               <span className={`flex shrink-0 items-center justify-center rounded-app bg-pulse font-black text-white ${compact ? "h-9 w-9 text-base" : "h-10 w-10 text-lg"}`}>
@@ -40,7 +40,7 @@ export function Sidebar({ compact = false, expandedWidth = 280, onResizeKeyDown,
               </span>
               {compact ? null : (
                 <span className="min-w-0">
-                  <strong className="block truncate leading-tight text-ink">Pulsa</strong>
+                  <strong className="block truncate leading-tight text-ink">Pulsar</strong>
                   <small className="block truncate text-muted">Seu dinheiro no ritmo</small>
                 </span>
               )}

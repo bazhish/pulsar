@@ -26,7 +26,7 @@ export function FirstTimeExplainer({ storageKey, title, description }: FirstTime
   if (!shouldRender) return null;
 
   return (
-    <section className={`mb-4 rounded-app border border-pulse/20 bg-gradient-to-r from-mint/80 to-surface p-4 shadow-soft ${state === "open" ? "animate-pop-in" : "animate-pop-out"}`}>
+    <section className={`mb-4 rounded-app border border-pulse/20 bg-gradient-to-r from-pulse/10 to-surface p-4 shadow-soft ${state === "open" ? "animate-pop-in" : "animate-pop-out"}`}>
       <div className="flex items-start justify-between gap-3">
         <div>
           <h2 className="font-bold">{title}</h2>

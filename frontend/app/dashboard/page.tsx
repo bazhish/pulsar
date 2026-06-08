@@ -47,12 +47,6 @@ export default function DashboardPage() {
         <PageHeader
           description="O essencial do seu mês em uma tela limpa."
           helpText="Mostra a visão rápida do seu mês: quanto entrou, quanto saiu, saldo previsto e quanto você pode gastar hoje."
-          media={
-            <div className="theme-control flex items-center gap-2 rounded-app border px-3 py-2 shadow-soft">
-              <span className="flex h-9 w-9 items-center justify-center rounded-app bg-pulse font-black text-white">P</span>
-              <span className="text-xl font-black text-ink">Pulsa</span>
-            </div>
-          }
           title="Resumo"
         />
 

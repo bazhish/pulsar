@@ -159,7 +159,12 @@ export default function RelatoriosPage() {
           <KpiCard label="Salário" value={formatBRL(report?.dashboard.salaryBase || 0)} />
           <KpiCard label="Entradas" value={formatBRL(report?.dashboard.inflow || 0)} tone="good" />
           <KpiCard label="Saídas" value={formatBRL(report?.dashboard.outflow || 0)} />
-          <KpiCard label="Saldo projetado" value={formatBRL(report?.dashboard.projectedBalance || 0)} tone={(report?.dashboard.projectedBalance || 0) < 0 ? "danger" : "good"} />
+          <KpiCard
+            label="Saldo Restante"
+            value={formatBRL(report?.dashboard.projectedBalance || 0)}
+            note="Considera salário, entradas e despesas do mês."
+            tone={(report?.dashboard.projectedBalance || 0) < 0 ? "danger" : "good"}
+          />
           <KpiCard label="Meta diária" value={formatBRL(report?.goals.dailyGoal || report?.goals.recommendedDailyGoal || 0)} note={report?.goals.dailyGoal ? "Definida por você" : "Recomendada"} />
         </div>
 

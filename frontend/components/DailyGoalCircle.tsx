@@ -33,6 +33,11 @@ export function DailyGoalCircle({ day, active, onSelect }: DailyGoalCircleProps)
       <div className="mt-2 text-center">
         <strong className="metric-number block text-xs">{formatBRL(day.spent)}</strong>
         <span className={`text-[11px] font-semibold ${state.className}`}>{Math.round(progress)}% / {state.label}</span>
+        {day.net !== 0 ? (
+          <span className={day.net < 0 ? "mt-1 block text-[11px] font-semibold text-coral" : "mt-1 block text-[11px] font-semibold text-leaf"}>
+            {day.net < 0 ? "" : "+"}{formatBRL(day.net)}
+          </span>
+        ) : null}
       </div>
     </button>
   );

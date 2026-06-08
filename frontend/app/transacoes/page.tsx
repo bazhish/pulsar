@@ -260,13 +260,8 @@ export default function TransacoesPage() {
                 <SearchInput
                   value={search}
                   onChange={setSearch}
-                  placeholder={
-                    typeFilter === "income"
-                      ? "Buscar entrada..."
-                      : typeFilter === "expense"
-                      ? "Buscar despesa..."
-                      : "Buscar movimentação..."
-                  }
+                  placeholder="Buscar por nome, categoria ou descricao"
+                  showIcon={false}
                 />
               </div>
               <div className="text-sm">

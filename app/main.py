@@ -1875,10 +1875,12 @@ def get_goals(user_id: str, month: str) -> dict:
     with db_cursor() as cursor:
         cursor.execute(
             """
-            SELECT substring(transaction_date from 9 for 2) AS day, COALESCE(SUM(amount), 0) AS total
+            SELECT
+              substring(transaction_date from 9 for 2) AS day,
+              COALESCE(SUM(CASE WHEN type = 'income' THEN amount ELSE 0 END), 0) AS income,
+              COALESCE(SUM(CASE WHEN type = 'expense' THEN amount ELSE 0 END), 0) AS expense
             FROM transactions
             WHERE user_id = %s
-              AND type = 'expense'
               AND transaction_date BETWEEN %s AND %s
               AND (billing_month IS NULL OR billing_month = %s)
             GROUP BY day
@@ -1911,7 +1913,13 @@ def get_goals(user_id: str, month: str) -> dict:
         )
         current_outflow_row = require_row(normalize_row(cursor.fetchone()), "Gasto atual não encontrado.")
 
-    day_map = {int(row["day"]): round_money(row["total"]) for row in rows}
+    day_map = {
+        int(row["day"]): {
+            "income": round_money(row["income"]),
+            "expense": round_money(row["expense"]),
+        }
+        for row in rows
+    }
     days: list[dict] = []
     legacy_daily_goal = round_money(settings["daily_goal"])
     reserve_amount = round_money(settings.get("reserve_amount") or 0)
@@ -1936,7 +1944,10 @@ def get_goals(user_id: str, month: str) -> dict:
         status_name = "red"
 
     for day_number in range(1, total_days + 1):
-        spent = round_money(day_map.get(day_number, Decimal("0")))
+        day_totals = day_map.get(day_number, {"income": Decimal("0"), "expense": Decimal("0")})
+        income = round_money(day_totals["income"])
+        spent = round_money(day_totals["expense"])
+        net = round_money(income - spent)
         remaining = round_money(target_daily_goal - spent)
         progress = float(min(Decimal("100"), (spent / target_daily_goal) * Decimal("100"))) if target_daily_goal > 0 else 0.0
         day_status = "over" if spent > target_daily_goal else ("empty" if spent == 0 else "ok")
@@ -1944,6 +1955,10 @@ def get_goals(user_id: str, month: str) -> dict:
             {
                 "day": day_number,
                 "spent": spent,
+                "income": income,
+                "expense": spent,
+                "net": net,
+                "dailyGoalDelta": remaining,
                 "remaining": remaining,
                 "progress": progress,
                 "status": day_status,
@@ -1979,6 +1994,16 @@ def get_goals(user_id: str, month: str) -> dict:
         "totalDays": total_days,
         "days": days,
     }
+
+
+def get_budget_status(spent: Decimal, planned: Decimal) -> str:
+    if planned <= 0:
+        return "ok"
+    if spent >= planned:
+        return "over"
+    if spent >= planned * Decimal("0.80"):
+        return "attention"
+    return "ok"
 
 
 def get_budget_summary(user_id: str, month: str) -> dict:
@@ -2044,12 +2069,7 @@ def get_budget_summary(user_id: str, month: str) -> dict:
         total_planned += planned
         total_spent += spent
         progress = float(min(Decimal("100"), (spent / planned) * Decimal("100"))) if planned > 0 else 0.0
-        if planned > 0 and spent > planned:
-            status_name = "over"
-        elif planned > 0 and spent >= planned * Decimal("0.85"):
-            status_name = "attention"
-        else:
-            status_name = "ok"
+        status_name = get_budget_status(spent, planned)
         items.append(
             {
                 "id": row["id"],

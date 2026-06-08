@@ -5,7 +5,7 @@ export function AuthBrand() {
         P
       </div>
       <div>
-        <p className="text-xl font-black tracking-tight text-ink">Pulsa</p>
+        <p className="text-xl font-black tracking-tight text-ink">Pulsar</p>
         <p className="text-sm font-semibold text-pulse">financas no ritmo certo</p>
       </div>
     </div>

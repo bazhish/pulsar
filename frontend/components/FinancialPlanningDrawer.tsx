@@ -55,7 +55,7 @@ export function FinancialPlanningDrawer({ open, settings, onClose, onSave }: Fin
   if (!shouldRender) return null;
 
   return (
-    <div className={`fixed inset-0 z-50 bg-ink/45 backdrop-blur-sm ${state === "open" ? "animate-overlay-in" : "animate-overlay-out"}`}>
+    <div className={`fixed inset-0 z-[220] bg-black/60 backdrop-blur-sm ${state === "open" ? "animate-overlay-in" : "animate-overlay-out"}`}>
       <div className={`theme-surface absolute inset-x-0 bottom-0 max-h-[92vh] overflow-y-auto rounded-t-app border p-4 shadow-lift sm:left-auto sm:right-4 sm:top-4 sm:h-[calc(100vh-2rem)] sm:w-[420px] sm:rounded-app ${state === "open" ? "animate-pop-in" : "animate-pop-out"}`}>
         <div className="mb-4 flex items-start justify-between gap-3">
           <div>

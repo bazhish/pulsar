@@ -185,7 +185,7 @@ export default function PerfilPage() {
             <div className="flex items-center gap-4">
               <ProfilePhoto initials={initials} name={displayName} preview={photoPreview} />
               <div className="min-w-0">
-                <p className="text-xs font-bold uppercase tracking-normal text-muted">Conta Pulsa</p>
+                <p className="text-xs font-bold uppercase tracking-normal text-muted">Conta Pulsar</p>
                 <h2 className="truncate text-xl font-black text-ink">{displayName}</h2>
                 <p className="mt-1 flex items-center gap-2 text-sm text-muted">
                   <Mail size={15} aria-hidden />
@@ -225,13 +225,9 @@ export default function PerfilPage() {
             Nome
             <input className="field mt-1" value={profile.name} onChange={(event) => setProfile({ ...profile, name: event.target.value })} required />
           </label>
-          <div className="mt-3 rounded-app border border-line p-3">
+          <div className="mt-3 rounded-app border border-line bg-surface-muted/40 p-3">
             <p className="text-sm font-semibold text-ink">Foto de perfil</p>
             <p className="mt-1 text-xs text-muted">JPG, PNG ou WebP ate 512 KB. A foto aparece no Perfil e na sidebar.</p>
-            <button className="btn-secondary mt-3" type="button" onClick={() => fileInputRef.current?.click()}>
-              <Upload size={16} aria-hidden />
-              Selecionar imagem
-            </button>
           </div>
           <button className="btn-primary mt-4" type="submit" disabled={savingProfile}>
             {savingProfile ? "Salvando..." : "Salvar perfil"}

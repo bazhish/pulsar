@@ -4,7 +4,7 @@ import { ThemeProvider, ThemeScript } from "@/lib/theme";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Pulsa - financas no ritmo certo",
+  title: "Pulsar - financas no ritmo certo",
   description: "Controle salario, despesas, metas e parcelas em um so lugar",
   icons: {
     icon: "/favicon.svg",

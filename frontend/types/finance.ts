@@ -109,6 +109,10 @@ export type Dashboard = {
 export type GoalDay = {
   day: number;
   spent: number;
+  income: number;
+  expense: number;
+  net: number;
+  dailyGoalDelta: number;
   remaining: number;
   progress: number;
   status: "ok" | "over" | "empty";
@@ -171,6 +175,7 @@ export type Score = {
   score: number;
   label: string;
   color: string;
+  reason?: string;
   breakdown: Record<string, number>;
 };
 

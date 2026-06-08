@@ -55,7 +55,7 @@ export function MainInsightCard({ userName, dashboard, alert }: MainInsightCardP
         <span className="text-sm font-semibold text-white/70">Você pode gastar hoje</span>
         <strong className="animate-text-reveal mt-2 block text-4xl font-black leading-tight tracking-normal sm:text-5xl">{formatBRL(dashboard?.availableToday || 0)}</strong>
         <p className="mt-2 text-sm text-white/75">
-          Saldo projetado de {formatBRL(dashboard?.projectedBalance || 0)} no fim do mês.
+          Saldo restante: {formatBRL(dashboard?.projectedBalance || 0)} considerando salário, entradas e despesas do mês.
         </p>
       </div>
       <div className="relative mt-4 rounded-app border border-white/15 bg-white/10 p-3 text-sm text-white/85 backdrop-blur">
@@ -65,7 +65,7 @@ export function MainInsightCard({ userName, dashboard, alert }: MainInsightCardP
         <MiniMetric label="Salário" value={formatBRL(dashboard?.salaryBase || 0)} />
         <MiniMetric label="Entradas" value={formatBRL(dashboard?.inflow || 0)} />
         <MiniMetric label="Saídas" value={formatBRL(dashboard?.outflow || 0)} />
-        <MiniMetric label="Saldo projetado" value={formatBRL(dashboard?.projectedBalance || 0)} />
+        <MiniMetric label="Saldo Restante" value={formatBRL(dashboard?.projectedBalance || 0)} />
       </div>
     </section>
   );

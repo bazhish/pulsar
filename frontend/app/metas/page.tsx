@@ -23,7 +23,7 @@ export default function MetasPage() {
 
   useEffect(() => {
     if (!token) return;
-    Promise.all([api.goals(token, month), api.transactions(token, { month, type: "expense" })])
+    Promise.all([api.goals(token, month), api.transactions(token, { month })])
       .then(([nextGoal, nextTransactions]) => {
         setGoal(nextGoal);
         setTransactions(nextTransactions);
