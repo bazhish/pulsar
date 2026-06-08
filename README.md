@@ -1,8 +1,4 @@
-<p align="center">
-  <img src="frontend/public/logo-mark.svg" alt="Pulsar" width="72" height="72" />
-</p>
-
-<h1 align="center">Pulsar</h1>
+<h1 align="center">Pulsa</h1>
 
 <p align="center">
   <strong>finanças no ritmo certo</strong>
@@ -127,7 +123,7 @@ Integração com Postgres: [tests/README.md](tests/README.md).
 
 ## Roadmap
 
-- [ ] Cookie HttpOnly para JWT (hoje `sessionStorage`)
+- [x] Cookie HttpOnly para JWT e persistencia de sessao
 - [ ] Modularização completa de rotas em `app/*`
 - [ ] Screenshots oficiais no README
 - [ ] Open Finance (quando houver provedor e compliance)
@@ -140,7 +136,7 @@ Leia [CONTRIBUTING.md](CONTRIBUTING.md) e [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.m
 
 ## Licença
 
-[MIT](LICENSE) — Copyright (c) 2025 Pulsar Contributors.
+[MIT](LICENSE) — Copyright (c) 2025 Pulsa Contributors.
 
 ## Limites atuais
 

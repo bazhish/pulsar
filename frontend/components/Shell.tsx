@@ -1,9 +1,5 @@
-"use client";
+import type { ReactNode } from "react";
 
-import { AppShell, useInsideAppShell } from "@/components/AppShell";
-
-export function Shell({ children }: Readonly<{ children: React.ReactNode }>) {
-  const insideAppShell = useInsideAppShell();
-  if (insideAppShell) return <>{children}</>;
-  return <AppShell>{children}</AppShell>;
+export function Shell({ children }: Readonly<{ children: ReactNode }>) {
+  return <>{children}</>;
 }

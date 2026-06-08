@@ -3,6 +3,7 @@
 import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, Check, ChevronDown, FileSpreadsheet, FileUp, ListChecks, ShieldCheck, Wand2 } from "lucide-react";
 import { EmptyState } from "@/components/EmptyState";
+import { FeedbackMessage } from "@/components/FeedbackMessage";
 import { PageHeader } from "@/components/PageHeader";
 import { SectionIntro } from "@/components/SectionIntro";
 import { Shell } from "@/components/Shell";
@@ -245,7 +246,7 @@ export default function ImportarPage() {
     <Shell>
       <div className="mx-auto max-w-6xl px-4 py-5 sm:py-6">
         <PageHeader
-          description="Você pode enviar um arquivo CSV do seu banco. O Pulsar lê as movimentações, mostra uma prévia e você decide o que importar."
+          description="Você pode enviar um arquivo CSV do seu banco. O Pulsa lê as movimentações, mostra uma prévia e você decide o que importar."
           helpText="Importe um extrato em CSV para cadastrar movimentações mais rápido. Você revisa tudo antes de confirmar."
           icon={FileUp}
           title="Importe seu extrato para cadastrar movimentações mais rápido."
@@ -266,7 +267,7 @@ export default function ImportarPage() {
 
         <Stepper activeIndex={activeStep} />
 
-        {message ? <p className="app-card mt-4 p-3 text-sm text-ink" role="status">{message}</p> : null}
+        <FeedbackMessage message={message} className="mt-4" />
 
         <section className="mt-4 grid gap-4 lg:grid-cols-[1fr_0.95fr]">
           <div className="app-card p-4">
@@ -279,7 +280,7 @@ export default function ImportarPage() {
             {!upload && !importResult ? (
               <EmptyState
                 title="Envie um arquivo .CSV para começar."
-                description="Depois do envio, o Pulsar mostra as colunas encontradas e guia você pelo mapeamento."
+                description="Depois do envio, o Pulsa mostra as colunas encontradas e guia você pelo mapeamento."
                 actionLabel={busyState === "upload" ? "Enviando..." : "Selecionar arquivo CSV"}
                 onAction={() => fileInputRef.current?.click()}
                 icon={FileSpreadsheet}
@@ -330,7 +331,7 @@ export default function ImportarPage() {
             <SectionIntro
               title="2. Mapear colunas"
               description="Escolha quais colunas do arquivo representam data, descrição e valor."
-              helpText="Tipo é opcional. Quando não houver coluna de tipo, o Pulsar tenta inferir entrada ou despesa pelo valor."
+              helpText="Tipo é opcional. Quando não houver coluna de tipo, o Pulsa tenta inferir entrada ou despesa pelo valor."
             />
 
             {upload ? (
@@ -415,7 +416,7 @@ export default function ImportarPage() {
                 <button className="btn-primary" type="button" onClick={() => handleConfirm().catch(console.error)} disabled={busyState === "confirm" || importableRows <= 0}>
                   {busyState === "confirm" ? "Importando..." : "Confirmar importação"}
                 </button>
-                <p className="text-sm text-muted">O Pulsar vai ignorar duplicatas e linhas inválidas.</p>
+                <p className="text-sm text-muted">O Pulsa vai ignorar duplicatas e linhas inválidas.</p>
               </div>
             </>
           ) : (

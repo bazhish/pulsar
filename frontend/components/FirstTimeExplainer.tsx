@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { X } from "lucide-react";
+import { useDelayedPresence } from "@/lib/useDelayedPresence";
 
 type FirstTimeExplainerProps = {
   storageKey: string;
@@ -11,6 +12,7 @@ type FirstTimeExplainerProps = {
 
 export function FirstTimeExplainer({ storageKey, title, description }: FirstTimeExplainerProps) {
   const [visible, setVisible] = useState(false);
+  const { shouldRender, state } = useDelayedPresence(visible, 180);
 
   useEffect(() => {
     setVisible(window.localStorage.getItem(storageKey) !== "1");
@@ -21,10 +23,10 @@ export function FirstTimeExplainer({ storageKey, title, description }: FirstTime
     setVisible(false);
   }
 
-  if (!visible) return null;
+  if (!shouldRender) return null;
 
   return (
-    <section className="mb-4 rounded-app border border-pulse/20 bg-gradient-to-r from-mint/80 to-surface p-4 shadow-soft">
+    <section className={`mb-4 rounded-app border border-pulse/20 bg-gradient-to-r from-mint/80 to-surface p-4 shadow-soft ${state === "open" ? "animate-pop-in" : "animate-pop-out"}`}>
       <div className="flex items-start justify-between gap-3">
         <div>
           <h2 className="font-bold">{title}</h2>

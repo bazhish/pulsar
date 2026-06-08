@@ -11,7 +11,7 @@ type QuickSettingsCardProps = {
 
 export function QuickSettingsCard({ settings, onEdit }: QuickSettingsCardProps) {
   return (
-    <section className="app-card p-4">
+    <section className="app-card interactive-card p-4">
       <div className="flex items-start justify-between gap-3">
         <div>
           <h2 className="font-bold">Seu planejamento</h2>
@@ -23,15 +23,15 @@ export function QuickSettingsCard({ settings, onEdit }: QuickSettingsCardProps) 
         </button>
       </div>
       <div className="mt-4 grid gap-2 text-sm">
-        <div className="flex items-center justify-between gap-3 rounded-app bg-mint/70 px-3 py-2">
+        <div className="interactive-list-item flex items-center justify-between gap-3 rounded-app bg-mint/70 px-3 py-2">
           <span className="text-muted">Salário</span>
           <strong className="metric-number">{formatBRL(settings?.monthly_income || 0)}</strong>
         </div>
-        <div className="flex items-center justify-between gap-3 rounded-app bg-sky/5 px-3 py-2">
+        <div className="interactive-list-item flex items-center justify-between gap-3 rounded-app bg-sky/5 px-3 py-2">
           <span className="text-muted">Reserva planejada</span>
           <strong className="metric-number">{formatBRL(settings?.reserve_amount || 0)}</strong>
         </div>
-        <div className="flex items-center justify-between gap-3 rounded-app bg-plum/5 px-3 py-2">
+        <div className="interactive-list-item flex items-center justify-between gap-3 rounded-app bg-plum/5 px-3 py-2">
           <span className="text-muted">Meta diária</span>
           <strong className="metric-number">{formatBRL(settings?.daily_goal || 0)}</strong>
         </div>

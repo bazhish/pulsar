@@ -16,7 +16,7 @@ export function BottomNav() {
           return (
             <Link
               aria-current={active ? "page" : undefined}
-              className={`focus-ring flex min-h-14 min-w-[74px] flex-col items-center justify-center gap-1 rounded-app px-2 py-2 text-[10px] font-bold transition ${active ? "bg-pulse text-white" : "text-ink/70 hover:bg-pulse/10 hover:text-ink"}`}
+              className={`focus-ring interactive-list-item flex min-h-14 min-w-[74px] flex-col items-center justify-center gap-1 rounded-app px-2 py-2 text-[10px] font-bold transition ${active ? "bg-pulse text-white shadow-soft" : "text-ink/70 hover:bg-pulse/10 hover:text-ink"}`}
               href={item.href}
               key={item.href}
             >

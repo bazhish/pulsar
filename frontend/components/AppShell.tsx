@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent, PointerEvent, ReactNode } from "react";
+import { usePathname } from "next/navigation";
 import { BottomNav } from "@/components/BottomNav";
 import { Sidebar } from "@/components/Sidebar";
 
@@ -24,6 +25,7 @@ function clampSidebarWidth(width: number) {
 }
 
 export function AppShell({ children }: Readonly<{ children: ReactNode }>) {
+  const pathname = usePathname();
   const [compact, setCompact] = useState(false);
   const [expandedWidth, setExpandedWidth] = useState(DEFAULT_WIDTH);
   const dragStartRef = useRef<{ pointerX: number; width: number } | null>(null);
@@ -102,7 +104,7 @@ export function AppShell({ children }: Readonly<{ children: ReactNode }>) {
           width={effectiveWidth}
         />
         <main id="app-main" className="min-w-0 pb-24 lg:pb-0">
-          <div className="min-h-screen animate-shell-content">{children}</div>
+          <div className="min-h-screen animate-shell-content page-transition" key={pathname}>{children}</div>
         </main>
         <BottomNav />
       </div>

@@ -14,7 +14,7 @@ export function AuthProductDemo({ compact = false }: Readonly<{ compact?: boolea
       <div className="glass-panel relative overflow-hidden p-4 md:p-5">
         <div className="mb-4 flex items-center justify-between gap-3">
           <div>
-            <p className="text-xs font-bold uppercase tracking-wide text-pulse">Prévia do Pulsar</p>
+            <p className="text-xs font-bold uppercase tracking-wide text-pulse">Previa do Pulsa</p>
             <h3 className="mt-1 text-lg font-black text-ink md:text-xl">Acompanhe o pulso do seu mês</h3>
           </div>
           <span className="rounded-app bg-pulse/10 px-2.5 py-1 text-[11px] font-bold text-pulse">Ao vivo</span>

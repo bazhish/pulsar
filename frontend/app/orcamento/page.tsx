@@ -4,17 +4,18 @@ import { FormEvent, useCallback, useEffect, useState } from "react";
 import { Copy, PiggyBank, Plus } from "lucide-react";
 import { BudgetCategoryCard } from "@/components/BudgetCategoryCard";
 import { EmptyState } from "@/components/EmptyState";
+import { FeedbackMessage } from "@/components/FeedbackMessage";
 import { FirstTimeExplainer } from "@/components/FirstTimeExplainer";
 import { KpiCard } from "@/components/KpiCard";
 import { MoneyInput } from "@/components/MoneyInput";
-import { MonthPicker } from "@/components/MonthPicker";
 import { PageHeader } from "@/components/PageHeader";
 import { SectionIntro } from "@/components/SectionIntro";
+import { Select } from "@/components/Select";
 import { Shell } from "@/components/Shell";
 import { api } from "@/lib/api";
 import { formatBRL } from "@/lib/format";
 import { useAuthToken } from "@/lib/useAuthToken";
-import type { BudgetSummary, Category } from "@/types/finance";
+import type { BudgetItem, BudgetSummary, Category } from "@/types/finance";
 
 function previousMonth(value: string) {
   const [year, month] = value.split("-").map(Number);
@@ -24,7 +25,7 @@ function previousMonth(value: string) {
 
 export default function OrcamentoPage() {
   const token = useAuthToken();
-  const [month, setMonth] = useState(new Date().toISOString().slice(0, 7));
+  const [month] = useState(new Date().toISOString().slice(0, 7));
   const [budget, setBudget] = useState<BudgetSummary | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
   const [categoryId, setCategoryId] = useState("");
@@ -59,13 +60,27 @@ export default function OrcamentoPage() {
     setMessage("Orçamento copiado do mês anterior.");
   }
 
+  async function handleDeleteBudget(item: BudgetItem) {
+    if (!token) return;
+    if (!window.confirm(`Remover o limite de ${item.categoryName} deste mes?`)) return;
+    await api.deleteBudget(token, item.id);
+    setMessage("Limite removido.");
+    await load();
+  }
+
+  async function handleDeleteCategory(item: BudgetItem) {
+    if (!token) return;
+    if (!window.confirm(`Remover a categoria ${item.categoryName}? Se houver movimentacoes vinculadas, ela sera arquivada para manter o historico.`)) return;
+    const result = await api.deleteCategory(token, item.categoryId);
+    setMessage(result.archived ? "Categoria arquivada e removida dos orcamentos." : "Categoria removida.");
+    if (categoryId === String(item.categoryId)) setCategoryId("");
+    await load();
+  }
+
   return (
     <Shell>
       <div className="mx-auto max-w-6xl px-4 py-5 sm:py-6">
         <PageHeader
-          actions={
-            <MonthPicker value={month} onChange={setMonth} />
-          }
           description="Defina limites para cada categoria e acompanhe seus gastos."
           helpText="Defina limites por categoria para saber quando está perto de gastar demais."
           icon={PiggyBank}
@@ -78,7 +93,7 @@ export default function OrcamentoPage() {
           description="Defina limites por categoria e o app avisa quando você está perto de gastar demais. Assim você mantém as despesas sob controle."
         />
 
-        {message ? <p className="app-card mb-4 p-3 text-sm text-ink">{message}</p> : null}
+        <FeedbackMessage message={message} />
 
         <div className="grid gap-3 sm:grid-cols-3">
           <KpiCard label="Planejado" value={formatBRL(budget?.totalPlanned || 0)} />
@@ -95,10 +110,16 @@ export default function OrcamentoPage() {
           <div className="grid gap-3 md:grid-cols-[1fr_180px_auto_auto]">
             <label className="text-sm">
               Categoria
-              <select className="field mt-1" value={categoryId} onChange={(event) => setCategoryId(event.target.value)} required>
-                <option value="">Selecione uma categoria</option>
-                {categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
-              </select>
+              <Select
+                className="mt-1"
+                value={categoryId}
+                onChange={(value) => setCategoryId(String(value))}
+                options={[
+                  { value: "", label: "Selecione uma categoria" },
+                  ...categories.map((category) => ({ value: String(category.id), label: category.name, color: category.color }))
+                ]}
+                placeholder="Selecione uma categoria"
+              />
             </label>
             <label className="text-sm">
               Limite mensal
@@ -117,14 +138,21 @@ export default function OrcamentoPage() {
           />
           {(budget?.items || []).length ? (
             <div className="grid gap-3 md:grid-cols-2">
-              {budget?.items.map((item) => <BudgetCategoryCard key={item.id} item={item} />)}
+              {budget?.items.map((item) => (
+                <BudgetCategoryCard
+                  key={item.id}
+                  item={item}
+                  onDeleteBudget={(nextItem) => handleDeleteBudget(nextItem).catch((err) => setMessage(err instanceof Error ? err.message : "Falha ao remover limite."))}
+                  onDeleteCategory={(nextItem) => handleDeleteCategory(nextItem).catch((err) => setMessage(err instanceof Error ? err.message : "Falha ao remover categoria."))}
+                />
+              ))}
             </div>
           ) : (
             <EmptyState
               title="Você ainda não definiu limite para este mês"
               description="Comece definindo quanto você pretende gastar em cada categoria. Por exemplo: Alimentação R$ 600, Transporte R$ 200. Assim o app avisa quando você está perto do limite."
               actionLabel="Definir primeiro limite"
-              onAction={() => document.querySelector<HTMLSelectElement>("select.field")?.focus()}
+              onAction={() => document.querySelector<HTMLButtonElement>("button[aria-label='Selecione uma categoria']")?.focus()}
               icon={PiggyBank}
             />
           )}

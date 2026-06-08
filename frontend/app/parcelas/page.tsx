@@ -1,13 +1,15 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useState } from "react";
-import { Calculator, Plus, TrendingUp } from "lucide-react";
+import { Calculator, Plus, Trash2, TrendingUp } from "lucide-react";
 import { EmptyState } from "@/components/EmptyState";
+import { FeedbackMessage } from "@/components/FeedbackMessage";
 import { FirstTimeExplainer } from "@/components/FirstTimeExplainer";
+import { IconButton } from "@/components/IconButton";
 import { MoneyInput } from "@/components/MoneyInput";
-import { MonthPicker } from "@/components/MonthPicker";
 import { PageHeader } from "@/components/PageHeader";
 import { SectionIntro } from "@/components/SectionIntro";
+import { Select } from "@/components/Select";
 import { Shell } from "@/components/Shell";
 import { api } from "@/lib/api";
 import { formatBRL } from "@/lib/format";
@@ -16,7 +18,7 @@ import { useAuthToken } from "@/lib/useAuthToken";
 import type { Category } from "@/types/finance";
 
 type Projection = Array<{ month: string; simulatedInstallment: number; projectedTotal: number }>;
-type FutureInstallment = { month: string; title: string; categoryName: string; amount: number; installmentNumber: number; totalInstallments: number };
+type FutureInstallment = { id: number; group: string; month: string; title: string; categoryName: string; amount: number; installmentNumber: number; totalInstallments: number };
 
 function asNumber(value: FormDataEntryValue | null) {
   return parseApiMoneyValue(String(value || "0"));
@@ -24,9 +26,10 @@ function asNumber(value: FormDataEntryValue | null) {
 
 export default function ParcelasPage() {
   const token = useAuthToken();
-  const [month, setMonth] = useState(new Date().toISOString().slice(0, 7));
+  const [month] = useState(new Date().toISOString().slice(0, 7));
   const [categories, setCategories] = useState<Category[]>([]);
   const [message, setMessage] = useState("");
+  const [registerCategoryId, setRegisterCategoryId] = useState("");
   const [projection, setProjection] = useState<Projection>([]);
   const [futureInstallments, setFutureInstallments] = useState<FutureInstallment[]>([]);
   const [totalMonthlyCommitment, setTotalMonthlyCommitment] = useState(0);
@@ -90,6 +93,7 @@ export default function ParcelasPage() {
       });
       setMessage("Compra parcelada criada com sucesso!");
       (event.currentTarget as HTMLFormElement).reset();
+      setRegisterCategoryId("");
       setProjection([]);
       // Reload future installments
       await loadFutureInstallments();
@@ -98,13 +102,20 @@ export default function ParcelasPage() {
     }
   }
 
+  async function deleteInstallmentPurchase(installment: FutureInstallment) {
+    if (!token) return;
+    if (!window.confirm(`Excluir "${installment.title}"? Todas as parcelas dessa compra serao removidas.`)) return;
+    await api.deleteTransaction(token, installment.id);
+    setMessage("Compra parcelada excluida.");
+    await loadFutureInstallments();
+  }
+
   return (
     <Shell>
       <div className="mx-auto max-w-6xl px-4 py-5 sm:py-6">
         <PageHeader
-          actions={<MonthPicker value={month} onChange={setMonth} />}
           description="Simule e controle compras parceladas para entender o impacto no seu orçamento."
-          helpText="Simule e registre compras parceladas sem cadastrar cartão. Veja o impacto nos próximos meses. O Pulsar não pede número do cartão nem CVV."
+          helpText="Simule e registre compras parceladas sem cadastrar cartão. Veja o impacto nos próximos meses. O Pulsa não pede número do cartão nem CVV."
           icon={TrendingUp}
           title="Parcelas"
         />
@@ -115,7 +126,7 @@ export default function ParcelasPage() {
           description="Use o simulador para ver como uma compra parcelada afeta seus próximos meses. Depois salve no seu controle de parcelas."
         />
 
-        {message ? <p className="app-card mb-4 p-3 text-sm text-ink">{message}</p> : null}
+        <FeedbackMessage message={message} />
 
         <section className="grid gap-4 xl:grid-cols-2">
           <form onSubmit={simulate} className="app-card p-4">
@@ -165,10 +176,17 @@ export default function ParcelasPage() {
               </label>
               <label className="text-sm">
                 Categoria
-                <select className="field mt-1" name="categoryId">
-                  <option value="">Selecionar (opcional)</option>
-                  {categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
-                </select>
+                <input type="hidden" name="categoryId" value={registerCategoryId} readOnly />
+                <Select
+                  className="mt-1"
+                  value={registerCategoryId}
+                  onChange={(value) => setRegisterCategoryId(String(value))}
+                  options={[
+                    { value: "", label: "Selecionar (opcional)" },
+                    ...categories.map((category) => ({ value: String(category.id), label: category.name, color: category.color }))
+                  ]}
+                  placeholder="Selecionar (opcional)"
+                />
               </label>
               <label className="text-sm">
                 Valor total
@@ -236,8 +254,8 @@ export default function ParcelasPage() {
               </div>
 
               <div className="grid gap-3">
-                {futureInstallments.map((inst, idx) => (
-                  <div key={idx} className="app-card flex items-start justify-between gap-3 p-3">
+                {futureInstallments.map((inst) => (
+                  <div key={`${inst.group}-${inst.id}`} className="app-card flex items-start justify-between gap-3 p-3">
                     <div>
                       <p className="font-semibold">{inst.title}</p>
                       <p className="text-xs text-muted">
@@ -248,6 +266,7 @@ export default function ParcelasPage() {
                       <p className="font-semibold">{formatBRL(inst.amount)}</p>
                       <p className="text-xs text-muted">{inst.month}</p>
                     </div>
+                    <IconButton icon={Trash2} label={`Excluir compra parcelada ${inst.title}`} onClick={() => deleteInstallmentPurchase(inst).catch((err) => setMessage(err instanceof Error ? err.message : "Falha ao excluir parcelas."))} />
                   </div>
                 ))}
               </div>

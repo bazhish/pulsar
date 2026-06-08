@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 import { BarChart3, FileUp, Layers3, PieChart as PieIcon, ReceiptText, Wallet } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { ActionRecommendationCard } from "@/components/ActionRecommendationCard";
@@ -36,6 +37,8 @@ const paymentMethodColors: Record<string, string> = {
 
 export function SummaryHome({ data, chartsReady, onEditPlanning }: SummaryHomeProps) {
   const { effectiveTheme } = useTheme();
+  const [activeCategory, setActiveCategory] = useState<string | null>(null);
+  const [activePayment, setActivePayment] = useState<string | null>(null);
   const dashboard = data?.dashboard;
   const tone = dashboard ? statusTone[dashboard.rhythmStatus] : "neutral";
   const pieData = (dashboard?.categoryBreakdown || []).map((item) => ({
@@ -53,6 +56,7 @@ export function SummaryHome({ data, chartsReady, onEditPlanning }: SummaryHomePr
   const hasBudget = Boolean(data?.budget.items.length);
   const chartGrid = effectiveTheme === "dark" ? "#2D3E55" : "#DDE7F0";
   const chartText = effectiveTheme === "dark" ? "#96A4B8" : "#6D7B8D";
+  const chartStroke = effectiveTheme === "dark" ? "#E8EFF7" : "#102033";
   const tooltipStyle = {
     backgroundColor: effectiveTheme === "dark" ? "#0E1B2D" : "#FFFFFF",
     border: `1px solid ${chartGrid}`,
@@ -89,8 +93,28 @@ export function SummaryHome({ data, chartsReady, onEditPlanning }: SummaryHomePr
               {chartsReady ? (
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
-                    <Pie data={pieData} dataKey="total" nameKey="name" innerRadius={48} outerRadius={88} paddingAngle={3}>
-                      {pieData.map((item) => <Cell key={item.name} fill={item.color} />)}
+                    <Pie
+                      data={pieData}
+                      dataKey="total"
+                      nameKey="name"
+                      innerRadius={48}
+                      outerRadius={88}
+                      paddingAngle={3}
+                      isAnimationActive
+                      animationDuration={650}
+                      animationEasing="ease-out"
+                      onMouseEnter={(_: unknown, index: number) => setActiveCategory(pieData[index]?.name || null)}
+                      onMouseLeave={() => setActiveCategory(null)}
+                    >
+                      {pieData.map((item) => (
+                        <Cell
+                          key={item.name}
+                          fill={item.color}
+                          opacity={!activeCategory || activeCategory === item.name ? 1 : 0.38}
+                          stroke={activeCategory === item.name ? chartStroke : "transparent"}
+                          strokeWidth={activeCategory === item.name ? 2 : 0}
+                        />
+                      ))}
                     </Pie>
                     <Tooltip contentStyle={tooltipStyle} formatter={(value) => formatBRL(Number(value))} />
                   </PieChart>
@@ -99,7 +123,12 @@ export function SummaryHome({ data, chartsReady, onEditPlanning }: SummaryHomePr
             </div>
             <div className="space-y-2">
               {pieData.slice(0, 6).map((item) => (
-                <div key={item.name} className="flex items-center justify-between gap-3 rounded-app border border-line bg-surface/75 p-3 text-sm shadow-sm">
+                <div
+                  key={item.name}
+                  className={`interactive-list-item flex items-center justify-between gap-3 rounded-app border p-3 text-sm shadow-sm ${activeCategory === item.name ? "border-pulse/60 bg-pulse/10" : "border-line bg-surface/75"}`}
+                  onMouseEnter={() => setActiveCategory(item.name)}
+                  onMouseLeave={() => setActiveCategory(null)}
+                >
                   <span className="flex items-center gap-2">
                     <span className="h-3 w-3 rounded-full" style={{ backgroundColor: item.color }} />
                     {item.name}
@@ -155,9 +184,18 @@ export function SummaryHome({ data, chartsReady, onEditPlanning }: SummaryHomePr
                         formatter={(value) => formatBRL(Number(value))}
                         contentStyle={tooltipStyle}
                       />
-                      <Bar dataKey="total" radius={[10, 10, 0, 0]}>
+                      <Bar
+                        dataKey="total"
+                        radius={[10, 10, 0, 0]}
+                        activeBar={{ fillOpacity: 0.88, stroke: chartStroke, strokeWidth: 2 }}
+                        isAnimationActive
+                        animationDuration={650}
+                        animationEasing="ease-out"
+                        onMouseEnter={(_: unknown, index: number) => setActivePayment(paymentData[index]?.payment_method || null)}
+                        onMouseLeave={() => setActivePayment(null)}
+                      >
                         {paymentData.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={entry.color} />
+                          <Cell key={`cell-${index}`} fill={entry.color} opacity={!activePayment || activePayment === entry.payment_method ? 1 : 0.42} />
                         ))}
                       </Bar>
                     </BarChart>
@@ -166,7 +204,12 @@ export function SummaryHome({ data, chartsReady, onEditPlanning }: SummaryHomePr
               </div>
               <div className="grid gap-2 sm:grid-cols-2">
                 {paymentData.map((item) => (
-                  <div key={item.payment_method} className="flex items-center justify-between rounded-app border border-line bg-surface/75 p-3 text-sm shadow-sm">
+                  <div
+                    key={item.payment_method}
+                    className={`interactive-list-item flex items-center justify-between rounded-app border p-3 text-sm shadow-sm ${activePayment === item.payment_method ? "border-pulse/60 bg-pulse/10" : "border-line bg-surface/75"}`}
+                    onMouseEnter={() => setActivePayment(item.payment_method)}
+                    onMouseLeave={() => setActivePayment(null)}
+                  >
                     <span className="flex items-center gap-2">
                       <span className="h-3 w-3 rounded-full" style={{ backgroundColor: item.color }} />
                       {item.payment_method}
@@ -213,7 +256,7 @@ export function SummaryHome({ data, chartsReady, onEditPlanning }: SummaryHomePr
           { href: "/importar", icon: FileUp, title: "Importar extrato CSV", description: "Traga movimentações do banco e revise tudo antes de confirmar." },
           { href: "/relatorios", icon: BarChart3, title: "Ver relatório do mês", description: "Analise categorias, formas de pagamento e evolução mensal." }
         ].map((action) => (
-          <Link className="app-card focus-ring p-4 transition hover:-translate-y-0.5 hover:border-pulse/50" href={action.href} key={action.href}>
+          <Link className="app-card interactive-card focus-ring p-4 transition hover:-translate-y-0.5 hover:border-pulse/50" href={action.href} key={action.href}>
             <span className="flex h-10 w-10 items-center justify-center rounded-app bg-pulse/10 text-pulse">
               <action.icon size={20} aria-hidden />
             </span>

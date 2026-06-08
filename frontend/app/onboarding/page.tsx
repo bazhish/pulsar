@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
 import { ArrowRight, FileUp, PlusCircle } from "lucide-react";
+import { FeedbackMessage } from "@/components/FeedbackMessage";
 import { MoneyInput } from "@/components/MoneyInput";
 import { OnboardingHint } from "@/components/OnboardingHint";
 import { PageHeader } from "@/components/PageHeader";
@@ -45,7 +46,7 @@ export default function OnboardingPage() {
           title="Comece simples"
           description="Salário e reserva já bastam para o Resumo funcionar. A meta diária pode ficar vazia ou 0 para o app recomendar."
         />
-        {message ? <p className="app-card mb-4 p-3 text-sm">{message}</p> : null}
+        <FeedbackMessage message={message} />
         <form onSubmit={save} className="app-card mt-4 p-4">
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="text-sm">

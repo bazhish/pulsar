@@ -59,10 +59,10 @@ export function ActionRecommendationCard({
   }
 
   return (
-    <section className="app-card p-4">
+    <section className="app-card interactive-card group p-4">
       <p className="text-xs font-bold uppercase tracking-normal text-muted">Próxima melhor ação</p>
       <div className="mt-3 flex items-start gap-3">
-        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-app bg-gradient-to-br from-pulse/15 to-plum/15 text-plum">
+        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-app bg-gradient-to-br from-pulse/15 to-plum/15 text-plum shadow-sm transition group-hover:scale-105">
           <Icon size={20} />
         </span>
         <div className="min-w-0">

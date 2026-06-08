@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { ArrowRight, Moon, Sun } from "lucide-react";
 import { api } from "@/lib/api";
+import { COOKIE_AUTH_TOKEN, rememberSession } from "@/lib/authSession";
 import { useTheme } from "@/lib/theme";
 import { AuthBenefits } from "@/components/auth/AuthBenefits";
 import { AuthBrand } from "@/components/auth/AuthBrand";
@@ -16,6 +17,21 @@ export default function CadastroPage() {
   const { effectiveTheme, preference, setPreference } = useTheme();
   const [error, setError] = useState("");
 
+  useEffect(() => {
+    let active = true;
+    api
+      .me(COOKIE_AUTH_TOKEN)
+      .then(() => {
+        if (!active) return;
+        rememberSession();
+        router.replace("/dashboard");
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [router]);
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
@@ -26,12 +42,12 @@ export default function CadastroPage() {
       return;
     }
     try {
-      const response = await api.register({
+      await api.register({
         name: String(form.get("name")),
         email: String(form.get("email")),
         password
       });
-      window.sessionStorage.setItem("rf_token", response.access_token);
+      rememberSession();
       router.replace("/onboarding");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Falha ao cadastrar.");
@@ -62,7 +78,7 @@ export default function CadastroPage() {
       <div className="glass-panel mx-auto grid w-full max-w-6xl overflow-hidden lg:grid-cols-[0.95fr_1.05fr]">
         <section className="order-1 mx-auto w-full max-w-md p-5 lg:order-1 lg:p-7">
           <form onSubmit={handleSubmit}>
-            <p className="text-sm font-bold text-pulse">Comece no Pulsar</p>
+            <p className="text-sm font-bold text-pulse">Comece no Pulsa</p>
             <h1 className="mt-1 text-2xl font-black leading-tight text-ink">Monte seu ritmo financeiro</h1>
             <p className="mt-2 text-sm text-muted">Crie sua conta e organize salário, metas e parcelas com clareza.</p>
 

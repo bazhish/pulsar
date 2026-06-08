@@ -63,6 +63,7 @@ CREATE TABLE IF NOT EXISTS categories (
   color TEXT NOT NULL DEFAULT '#9be768',
   icon TEXT DEFAULT U&'\\25CF',
   is_default INTEGER NOT NULL DEFAULT 0 CHECK (is_default IN (0, 1)),
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
   UNIQUE (user_id, name),
   UNIQUE (user_id, id)
 );
@@ -131,6 +132,9 @@ ALTER TABLE users
   ADD COLUMN IF NOT EXISTS auth_provider TEXT,
   ADD COLUMN IF NOT EXISTS oauth_subject TEXT,
   ADD COLUMN IF NOT EXISTS password_changed_at TIMESTAMPTZ;
+
+ALTER TABLE categories
+  ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE;
 
 ALTER TABLE users
   ALTER COLUMN hashed_password DROP NOT NULL;

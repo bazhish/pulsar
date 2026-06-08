@@ -1,6 +1,6 @@
 # Visão de produto
 
-Pulsar é um assistente financeiro pessoal mobile first para transformar registros soltos em decisões simples.
+Pulsa e um assistente financeiro pessoal mobile first para transformar registros soltos em decisoes simples.
 
 Perguntas principais:
 

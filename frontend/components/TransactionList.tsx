@@ -19,7 +19,7 @@ export function TransactionList({ items }: { items: Transaction[] }) {
   return (
     <div className="divide-y divide-line">
       {items.map((item) => (
-        <div key={item.id} className="flex items-center justify-between gap-3 py-3">
+        <div key={item.id} className="interactive-list-item flex items-center justify-between gap-3 rounded-app px-2 py-3">
           <div className="min-w-0">
             <strong className="block truncate text-sm">{item.title}</strong>
             <small className="text-muted">

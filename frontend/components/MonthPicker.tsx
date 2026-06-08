@@ -14,7 +14,7 @@ function addMonths(value: string, offset: number) {
 
 export function MonthPicker({ value, onChange }: MonthPickerProps) {
   return (
-    <div className="flex items-center gap-2">
+    <div className="theme-surface flex items-center gap-2 rounded-app border p-1 shadow-sm">
       <IconButton icon={ChevronLeft} label="Mês anterior" onClick={() => onChange(addMonths(value, -1))} />
       <input className="field h-10 w-36" type="month" value={value} onChange={(event) => onChange(event.target.value)} />
       <IconButton icon={CalendarClock} label="Voltar para mês atual" onClick={() => onChange(new Date().toISOString().slice(0, 7))} />

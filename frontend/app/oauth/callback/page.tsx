@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import { LoaderCircle } from "lucide-react";
 import { AuthBrand } from "@/components/auth/AuthBrand";
+import { rememberSession } from "@/lib/authSession";
 
 function OAuthCallbackContent() {
   const router = useRouter();
@@ -14,10 +15,11 @@ function OAuthCallbackContent() {
   useEffect(() => {
     const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
     const token = searchParams.get("access_token") || hashParams.get("access_token");
+    const hasCookieSession = searchParams.get("session") === "1";
     const error = searchParams.get("error");
 
-    if (token) {
-      window.sessionStorage.setItem("rf_token", token);
+    if (token || hasCookieSession) {
+      rememberSession();
       window.history.replaceState(null, "", "/oauth/callback");
       router.replace("/dashboard");
       return;

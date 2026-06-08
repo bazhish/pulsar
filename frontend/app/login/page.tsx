@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { ArrowRight, Moon, Sun } from "lucide-react";
 import { api } from "@/lib/api";
+import { COOKIE_AUTH_TOKEN, rememberSession } from "@/lib/authSession";
 import { useTheme } from "@/lib/theme";
 import { AuthBenefits } from "@/components/auth/AuthBenefits";
 import { AuthBrand } from "@/components/auth/AuthBrand";
@@ -16,12 +17,27 @@ export default function LoginPage() {
   const { effectiveTheme, preference, setPreference } = useTheme();
   const [error, setError] = useState("");
 
+  useEffect(() => {
+    let active = true;
+    api
+      .me(COOKIE_AUTH_TOKEN)
+      .then(() => {
+        if (!active) return;
+        rememberSession();
+        router.replace("/dashboard");
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [router]);
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     try {
-      const response = await api.login(String(form.get("email")), String(form.get("password")));
-      window.sessionStorage.setItem("rf_token", response.access_token);
+      await api.login(String(form.get("email")), String(form.get("password")));
+      rememberSession();
       router.replace("/dashboard");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Falha ao entrar.");
@@ -68,7 +84,7 @@ export default function LoginPage() {
 
         <section className="order-1 mx-auto w-full max-w-md p-5 lg:order-2 lg:p-7">
           <form onSubmit={handleSubmit}>
-            <p className="text-sm font-bold text-pulse">Entre no Pulsar</p>
+            <p className="text-sm font-bold text-pulse">Entre no Pulsa</p>
             <h1 className="mt-1 text-2xl font-black leading-tight text-ink">Acompanhe o pulso do seu mês</h1>
             <p className="mt-2 text-sm text-muted">Saiba quanto pode gastar hoje e mantenha metas no ritmo certo.</p>
 

@@ -1,10 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import Image from "next/image";
 import { FinancialPlanningDrawer } from "@/components/FinancialPlanningDrawer";
+import { FeedbackMessage } from "@/components/FeedbackMessage";
 import { FirstTimeExplainer } from "@/components/FirstTimeExplainer";
-import { MonthPicker } from "@/components/MonthPicker";
 import { PageHeader } from "@/components/PageHeader";
 import { Shell } from "@/components/Shell";
 import { SummaryHome } from "@/components/SummaryHome";
@@ -14,7 +13,7 @@ import type { Bootstrap } from "@/types/finance";
 
 export default function DashboardPage() {
   const token = useAuthToken();
-  const [month, setMonth] = useState(new Date().toISOString().slice(0, 7));
+  const [month] = useState(new Date().toISOString().slice(0, 7));
   const [data, setData] = useState<Bootstrap | null>(null);
   const [message, setMessage] = useState("");
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -46,13 +45,12 @@ export default function DashboardPage() {
     <Shell>
       <div className="mx-auto max-w-6xl px-4 py-5 sm:py-6">
         <PageHeader
-          actions={<MonthPicker value={month} onChange={setMonth} />}
           description="O essencial do seu mês em uma tela limpa."
           helpText="Mostra a visão rápida do seu mês: quanto entrou, quanto saiu, saldo previsto e quanto você pode gastar hoje."
           media={
-            <div className="theme-control rounded-app border p-2 shadow-soft">
-              <Image className="dark:hidden" src="/logo.svg" alt="Pulsar" width={180} height={50} priority />
-              <Image className="hidden dark:block" src="/logo-dark.svg" alt="Pulsar" width={180} height={50} priority />
+            <div className="theme-control flex items-center gap-2 rounded-app border px-3 py-2 shadow-soft">
+              <span className="flex h-9 w-9 items-center justify-center rounded-app bg-pulse font-black text-white">P</span>
+              <span className="text-xl font-black text-ink">Pulsa</span>
             </div>
           }
           title="Resumo"
@@ -64,7 +62,7 @@ export default function DashboardPage() {
           description="Aqui você vê quanto pode gastar hoje, o status do ritmo financeiro e a próxima melhor ação. Os detalhes continuam nas outras abas."
         />
 
-        {message ? <p className="app-card mb-4 p-3 text-sm text-ink">{message}</p> : null}
+        <FeedbackMessage message={message} />
 
         <SummaryHome data={data} chartsReady={chartsReady} onEditPlanning={() => setDrawerOpen(true)} />
 

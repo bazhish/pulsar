@@ -27,6 +27,7 @@ export type Category = {
   type: TransactionType;
   color: string;
   icon: string;
+  is_active?: boolean;
 };
 
 export type Transaction = {

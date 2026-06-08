@@ -272,7 +272,6 @@ def fetch_oauth_profile(provider: str, code: str, state: str, cookie_state: str 
 def frontend_redirect(access_token: str | None = None, error: str | None = None) -> RedirectResponse:
     base = oauth_frontend_callback_url()
     if access_token:
-        query = urlencode({"access_token": access_token, "token_type": "bearer"})  # nosec B105
-        return RedirectResponse(f"{base}#{query}", status_code=302)
+        return RedirectResponse(f"{base}?session=1", status_code=302)
     query = urlencode({"error": error or "oauth_failed"})
     return RedirectResponse(f"{base}?{query}", status_code=302)

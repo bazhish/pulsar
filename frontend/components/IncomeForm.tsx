@@ -12,7 +12,7 @@ type IncomeFormProps = {
   form: MovementFormState;
   categories: Category[];
   onChange: (form: MovementFormState) => void;
-  onCreateCategory?: (category: CreateCategoryInput) => Promise<void>;
+  onCreateCategory?: (category: CreateCategoryInput) => Promise<Category>;
 };
 
 export function IncomeForm({
@@ -25,18 +25,8 @@ export function IncomeForm({
   const incomeCategories = categories.filter((c) => c.type === "income");
 
   async function handleCreateCategory(category: CreateCategoryInput) {
-    if (onCreateCategory) {
-      await onCreateCategory(category);
-    }
-    // Auto-select the new category
-    const newCategories = [...incomeCategories, {
-      id: Math.random(),
-      name: category.name,
-      type: category.type,
-      color: category.color,
-      icon: category.icon
-    }];
-    const newCategory = newCategories[newCategories.length - 1];
+    const newCategory = onCreateCategory ? await onCreateCategory(category) : null;
+    if (!newCategory) return;
     onChange({ ...form, categoryId: String(newCategory.id) });
     setShowCreateCategory(false);
   }

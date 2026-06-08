@@ -27,7 +27,7 @@ type ExpenseFormProps = {
   form: MovementFormState;
   categories: Category[];
   onChange: (form: MovementFormState) => void;
-  onCreateCategory?: (category: CreateCategoryInput) => Promise<void>;
+  onCreateCategory?: (category: CreateCategoryInput) => Promise<Category>;
 };
 
 const paymentMethods = [
@@ -49,18 +49,8 @@ export function ExpenseForm({
   const isCredit = form.paymentMethod === "credito";
 
   async function handleCreateCategory(category: CreateCategoryInput) {
-    if (onCreateCategory) {
-      await onCreateCategory(category);
-    }
-    // Auto-select the new category
-    const newCategories = [...expenseCategories, {
-      id: Math.random(),
-      name: category.name,
-      type: category.type,
-      color: category.color,
-      icon: category.icon
-    }];
-    const newCategory = newCategories[newCategories.length - 1];
+    const newCategory = onCreateCategory ? await onCreateCategory(category) : null;
+    if (!newCategory) return;
     onChange({ ...form, categoryId: String(newCategory.id) });
     setShowCreateCategory(false);
   }

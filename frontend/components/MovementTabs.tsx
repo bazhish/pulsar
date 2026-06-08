@@ -27,7 +27,7 @@ export function MovementTabs({ value, onChange, totals }: MovementTabsProps) {
         return (
           <button
             key={tab.label}
-            className={`focus-ring rounded-app px-2 py-3 text-left text-sm transition ${active ? "bg-gradient-to-r from-pulse to-plum text-white shadow-soft" : "theme-control text-ink hover:border-pulse/50"}`}
+            className={`focus-ring interactive-list-item rounded-app px-2 py-3 text-left text-sm transition ${active ? "bg-gradient-to-r from-pulse to-plum text-white shadow-soft" : "theme-control text-ink hover:border-pulse/50"}`}
             type="button"
             onClick={() => onChange(tab.value)}
           >

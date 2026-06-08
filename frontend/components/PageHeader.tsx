@@ -15,10 +15,10 @@ type PageHeaderProps = {
 
 export function PageHeader({ actions, description, helpText, icon: Icon, media, title }: PageHeaderProps) {
   return (
-    <header className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+    <header className="animate-rise-in mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
       <div className="flex min-w-0 items-center gap-3">
         {media ? media : Icon ? (
-          <span className="theme-control flex h-11 w-11 shrink-0 items-center justify-center rounded-app border text-pulse shadow-soft">
+          <span className="theme-control flex h-11 w-11 shrink-0 items-center justify-center rounded-app border text-pulse shadow-soft transition hover:scale-105">
             <Icon size={22} aria-hidden />
           </span>
         ) : null}

@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { X, Plus } from "lucide-react";
-import type { TransactionType } from "@/types/finance";
+import { useDelayedPresence } from "@/lib/useDelayedPresence";
+import type { Category, TransactionType } from "@/types/finance";
 
 const categoryColors = [
   "#ef4444", // red
@@ -30,7 +31,7 @@ export type CreateCategoryInput = {
 type CreateCategoryDrawerProps = {
   open: boolean;
   onClose: () => void;
-  onSubmit: (category: CreateCategoryInput) => Promise<void>;
+  onSubmit: (category: CreateCategoryInput) => Promise<Category | void>;
   defaultType?: TransactionType;
 };
 
@@ -48,8 +49,9 @@ export function CreateCategoryDrawer({
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const { shouldRender, state } = useDelayedPresence(open, 180);
 
-  if (!open) return null;
+  if (!shouldRender) return null;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -75,18 +77,18 @@ export function CreateCategoryDrawer({
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       {/* Blur background */}
       <div
-        className="absolute inset-0 bg-black/30 backdrop-blur-sm"
+        className={`absolute inset-0 bg-black/30 backdrop-blur-sm ${state === "open" ? "animate-overlay-in" : "animate-overlay-out"}`}
         onClick={onClose}
       />
 
       {/* Modal */}
-      <div className="theme-surface relative mx-4 w-full max-w-md rounded-app border p-6 shadow-lift">
+      <div className={`theme-surface relative mx-4 w-full max-w-md rounded-app border p-6 shadow-lift ${state === "open" ? "animate-pop-in" : "animate-pop-out"}`}>
         <div className="flex items-center justify-between gap-4 mb-4">
           <h2 className="text-lg font-bold">Criar categoria</h2>
           <button
             type="button"
             onClick={onClose}
-            className="text-muted hover:text-ink transition p-1"
+            className="focus-ring theme-control inline-flex h-9 w-9 items-center justify-center rounded-app border text-muted transition hover:text-ink"
             aria-label="Fechar"
           >
             <X size={20} />
@@ -115,7 +117,7 @@ export function CreateCategoryDrawer({
                   key={type}
                   type="button"
                   onClick={() => setForm({ ...form, type })}
-                  className={`p-3 rounded-app border-2 text-sm font-semibold transition ${
+                  className={`interactive-list-item p-3 rounded-app border-2 text-sm font-semibold transition ${
                     form.type === type
                       ? type === "expense"
                         ? "border-coral bg-coral/10 text-coral"
@@ -138,7 +140,7 @@ export function CreateCategoryDrawer({
                   key={color}
                   type="button"
                   onClick={() => setForm({ ...form, color })}
-                  className={`h-10 rounded-app border-2 transition ${
+                  className={`h-10 rounded-app border-2 transition hover:scale-105 ${
                     form.color === color
                       ? "border-ink scale-110"
                       : "border-line hover:border-ink"
@@ -159,7 +161,7 @@ export function CreateCategoryDrawer({
                   key={icon}
                   type="button"
                   onClick={() => setForm({ ...form, icon })}
-                  className={`h-10 text-xl rounded-app border-2 flex items-center justify-center transition ${
+                  className={`interactive-list-item h-10 text-xl rounded-app border-2 flex items-center justify-center transition ${
                     form.icon === icon
                       ? "scale-110 border-ink bg-surface/75"
                       : "border-line hover:border-pulse hover:bg-pulse/10"
@@ -174,7 +176,7 @@ export function CreateCategoryDrawer({
           </label>
 
           {error && (
-            <p className="text-sm text-coral bg-coral/10 p-3 rounded-app">
+            <p className="feedback-message text-sm text-coral bg-coral/10 p-3 rounded-app">
               {error}
             </p>
           )}

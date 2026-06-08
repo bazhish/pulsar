@@ -2,7 +2,7 @@
 
 ## Escopo
 
-Este documento descreve os controles defensivos atuais do Pulsar e o que precisa ser revisado antes de producao.
+Este documento descreve os controles defensivos atuais do Pulsa e o que precisa ser revisado antes de producao.
 
 ## Autenticacao
 
@@ -17,11 +17,10 @@ Este documento descreve os controles defensivos atuais do Pulsar e o que precisa
 ## JWT e sessoes
 
 - Tokens tem `exp` e `iat`.
-- Logout revoga o token no servidor usando hash SHA-256 do token, nunca o token puro.
+- O token de acesso fica em cookie HttpOnly/SameSite; o frontend guarda apenas um indicativo local de sessao ativa.
+- Logout revoga o token no servidor usando hash SHA-256 do token, nunca o token puro, e limpa o cookie.
 - Troca de senha grava `password_changed_at` e invalida tokens emitidos antes dela.
 - `JWT_SECRET_KEY` e obrigatoria e deve ter pelo menos 32 caracteres.
-
-Limitacao atual: o frontend ainda usa `sessionStorage` para o JWT. Isso reduz persistencia entre abas/sessoes, mas continua exposto a XSS. A evolucao recomendada e migrar para cookie HttpOnly/Secure com estrategia CSRF explicita.
 
 ## Autorizacao e IDOR
 

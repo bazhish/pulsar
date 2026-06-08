@@ -52,7 +52,8 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 FRONTEND_OUT_DIR = BASE_DIR / "frontend" / "out"
 
 JWT_ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_HOURS = 24
+ACCESS_TOKEN_EXPIRE_HOURS = int(os.getenv("ACCESS_TOKEN_EXPIRE_HOURS", "168"))
+AUTH_COOKIE_NAME = "pulsa_access_token"
 CARD_UNLOCK_SECONDS = 15 * 60
 PIN_FAILURE_WINDOW_SECONDS = 5 * 60
 PIN_MAX_ATTEMPTS = 3
@@ -135,7 +136,7 @@ pin_context = CryptContext(
     bcrypt__rounds=10,
     bcrypt__truncate_error=True,
 )
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login", auto_error=False)
 limiter = Limiter(key_func=get_remote_address)
 db_pool: Optional[ThreadedConnectionPool] = None
 card_pin_failures: dict[str, dict[str, Any]] = {}
@@ -186,7 +187,7 @@ ALLOWED_ORIGINS = parse_allowed_origins()
 PROFILE_PHOTO_DIR.mkdir(parents=True, exist_ok=True)
 
 
-app = FastAPI(title="Pulsar API", version="2.0.0")
+app = FastAPI(title="Pulsa API", version="2.0.0")
 app.state.limiter = limiter
 app.mount(PROFILE_PHOTO_URL_PREFIX, StaticFiles(directory=PROFILE_PHOTO_DIR), name="profile-photos")
 
@@ -821,6 +822,22 @@ def create_access_token(user_id: str) -> str:
     return jwt.encode(payload, get_jwt_secret(), algorithm=JWT_ALGORITHM)
 
 
+def set_auth_cookie(response: Response, token: str) -> None:
+    response.set_cookie(
+        AUTH_COOKIE_NAME,
+        token,
+        httponly=True,
+        max_age=ACCESS_TOKEN_EXPIRE_HOURS * 3600,
+        path="/",
+        samesite="lax",
+        secure=is_production(),
+    )
+
+
+def clear_auth_cookie(response: Response) -> None:
+    response.delete_cookie(AUTH_COOKIE_NAME, path="/", samesite="lax", secure=is_production())
+
+
 def revoke_token(token: str, user_id: str | None = None) -> None:
     current_hash = token_hash(token)
     revoked_token_hashes.add(current_hash)
@@ -1005,12 +1022,18 @@ def ensure_user_defaults(user_id: str) -> None:
         ensure_user_defaults_for_cursor(cursor, user_id)
 
 
-def get_current_user(token: str = Depends(oauth2_scheme)) -> dict:
+def get_current_user(
+    token: str | None = Depends(oauth2_scheme),
+    cookie_token: str | None = Cookie(default=None, alias=AUTH_COOKIE_NAME),
+) -> dict:
     credentials_error = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Token inv\u00e1lido ou expirado.",
         headers={"WWW-Authenticate": "Bearer"},
     )
+    token = token or cookie_token
+    if not token:
+        raise credentials_error
     if is_token_revoked(token):
         raise credentials_error
     try:
@@ -1059,6 +1082,7 @@ def list_categories(user_id: str) -> list[dict]:
             SELECT *
             FROM categories
             WHERE user_id = %s
+              AND COALESCE(is_active, TRUE) = TRUE
             ORDER BY type ASC, name ASC
             """,
             (user_id,),
@@ -1977,7 +2001,9 @@ def get_budget_summary(user_id: str, month: str) -> dict:
              AND t.category_id = b.category_id
              AND t.type = 'expense'
              AND COALESCE(t.billing_month, substring(t.transaction_date from 1 for 7)) = b.month
-            WHERE b.user_id = %s AND b.month = %s
+            WHERE b.user_id = %s
+              AND b.month = %s
+              AND COALESCE(c.is_active, TRUE) = TRUE
             GROUP BY b.id, b.category_id, c.name, c.color, c.icon, b.planned_amount
             ORDER BY c.name ASC
             """,
@@ -1996,6 +2022,7 @@ def get_budget_summary(user_id: str, month: str) -> dict:
              AND COALESCE(t.billing_month, substring(t.transaction_date from 1 for 7)) = %s
             WHERE c.user_id = %s
               AND c.type = 'expense'
+              AND COALESCE(c.is_active, TRUE) = TRUE
               AND NOT EXISTS (
                 SELECT 1
                 FROM budgets b
@@ -2959,7 +2986,7 @@ def health():
 
 @app.post("/api/auth/register", status_code=status.HTTP_201_CREATED)
 @limiter.limit("3 per 1 hour")
-def register(request: Request, payload: RegisterPayload) -> dict:
+def register(request: Request, response: Response, payload: RegisterPayload) -> dict:
     email = normalize_email(payload.email)
     name = clean_text(payload.name, "Nome", 100)
     validate_password_strength(payload.password)
@@ -2982,7 +3009,9 @@ def register(request: Request, payload: RegisterPayload) -> dict:
         raise HTTPException(status_code=400, detail="E-mail j\u00e1 cadastrado.")
 
     audit_log("user_registered", str(user["id"]), {"email_hash": email_hash(email)})
-    return {"access_token": create_access_token(user["id"]), "token_type": "bearer"}  # nosec B105
+    token = create_access_token(user["id"])
+    set_auth_cookie(response, token)
+    return {"access_token": token, "token_type": "bearer"}  # nosec B105
 
 
 @app.get("/api/auth/oauth/providers")
@@ -3022,7 +3051,10 @@ def oauth_callback(
         profile = fetch_oauth_profile(provider, code, state, oauth_state_cookie)
         user = resolve_oauth_user(profile)
         audit_log("login_success_oauth", str(user["id"]), {"provider": provider, "email_hash": email_hash(user["email"])})
-        return redirect_and_clear(access_token=create_access_token(user["id"]))
+        token = create_access_token(user["id"])
+        response = redirect_and_clear(access_token=token)
+        set_auth_cookie(response, token)
+        return response
     except HTTPException as exc:
         logger.info("OAuth callback failed provider=%s detail=%s", provider, exc.detail)
         return redirect_and_clear(error_message=str(exc.detail))
@@ -3035,6 +3067,7 @@ def oauth_callback(
 @limiter.limit("5 per 15 minutes")
 def login(
     request: Request,
+    response: Response,
     email: str = Form(..., max_length=255),
     password: str = Form(..., max_length=72),
 ) -> dict:
@@ -3053,7 +3086,9 @@ def login(
 
     clear_login_failures(email_value)
     audit_log("login_success", str(user["id"]), {"email_hash": email_hash(email_value)})
-    return {"access_token": create_access_token(user["id"]), "token_type": "bearer"}  # nosec B105
+    token = create_access_token(user["id"])
+    set_auth_cookie(response, token)
+    return {"access_token": token, "token_type": "bearer"}  # nosec B105
 
 
 @app.get("/api/auth/me")
@@ -3197,8 +3232,17 @@ def auth_stats(current_user: dict = Depends(get_current_user)) -> dict:
 
 
 @app.post("/api/auth/logout")
-def logout(token: str = Depends(oauth2_scheme), current_user: dict = Depends(get_current_user)) -> dict:
+def logout(
+    response: Response,
+    token: str | None = Depends(oauth2_scheme),
+    cookie_token: str | None = Cookie(default=None, alias=AUTH_COOKIE_NAME),
+    current_user: dict = Depends(get_current_user),
+) -> dict:
+    token = token or cookie_token
+    if not token:
+        raise HTTPException(status_code=401, detail="Token inv\u00e1lido ou expirado.")
     revoke_token(token, current_user["id"])
+    clear_auth_cookie(response)
     return {"message": "Sessão encerrada no servidor."}
 
 
@@ -3422,6 +3466,19 @@ def save_budget(payload: BudgetPayload, current_user: dict = Depends(get_current
     return row
 
 
+@app.delete("/api/budgets/{budget_id}")
+def delete_budget(budget_id: int, current_user: dict = Depends(get_current_user)) -> dict:
+    with db_cursor(commit=True) as cursor:
+        cursor.execute(
+            "DELETE FROM budgets WHERE user_id = %s AND id = %s RETURNING id",
+            (current_user["id"], budget_id),
+        )
+        row = normalize_row(cursor.fetchone())
+    if not row:
+        raise HTTPException(status_code=404, detail="Or\u00e7amento n\u00e3o encontrado.")
+    return {"deleted": True}
+
+
 @app.post("/api/budgets/copy")
 def copy_budget(payload: BudgetCopyPayload, current_user: dict = Depends(get_current_user)) -> dict:
     user_id = current_user["id"]
@@ -3431,9 +3488,12 @@ def copy_budget(payload: BudgetCopyPayload, current_user: dict = Depends(get_cur
         cursor.execute(
             """
             INSERT INTO budgets (user_id, category_id, month, planned_amount)
-            SELECT user_id, category_id, %s, planned_amount
-            FROM budgets
-            WHERE user_id = %s AND month = %s
+            SELECT b.user_id, b.category_id, %s, b.planned_amount
+            FROM budgets b
+            JOIN categories c ON c.id = b.category_id AND c.user_id = b.user_id
+            WHERE b.user_id = %s
+              AND b.month = %s
+              AND COALESCE(c.is_active, TRUE) = TRUE
             ON CONFLICT (user_id, category_id, month)
             DO UPDATE SET planned_amount = EXCLUDED.planned_amount, updated_at = NOW()
             """,
@@ -3696,8 +3756,15 @@ def create_category(payload: CategoryPayload, current_user: dict = Depends(get_c
         with db_cursor(commit=True) as cursor:
             cursor.execute(
                 """
-                INSERT INTO categories (user_id, name, type, color, icon, is_default)
-                VALUES (%s, %s, %s, %s, %s, 0)
+                INSERT INTO categories (user_id, name, type, color, icon, is_default, is_active)
+                VALUES (%s, %s, %s, %s, %s, 0, TRUE)
+                ON CONFLICT (user_id, name)
+                DO UPDATE SET
+                    type = EXCLUDED.type,
+                    color = EXCLUDED.color,
+                    icon = EXCLUDED.icon,
+                    is_active = TRUE,
+                    updated_at = NOW()
                 RETURNING *
                 """,
                 (user_id, name, payload.type, color, icon),
@@ -3707,6 +3774,43 @@ def create_category(payload: CategoryPayload, current_user: dict = Depends(get_c
         raise HTTPException(status_code=400, detail="Categoria j\u00e1 existe.")
 
     return row
+
+
+@app.delete("/api/categories/{category_id}")
+def delete_category(category_id: int, current_user: dict = Depends(get_current_user)) -> dict:
+    user_id = current_user["id"]
+    with db_cursor(commit=True) as cursor:
+        cursor.execute(
+            """
+            SELECT id, is_default
+            FROM categories
+            WHERE user_id = %s AND id = %s AND COALESCE(is_active, TRUE) = TRUE
+            """,
+            (user_id, category_id),
+        )
+        category = normalize_row(cursor.fetchone())
+        if not category:
+            raise HTTPException(status_code=404, detail="Categoria n\u00e3o encontrada.")
+
+        cursor.execute(
+            "SELECT COUNT(*) AS total FROM transactions WHERE user_id = %s AND category_id = %s",
+            (user_id, category_id),
+        )
+        linked_transactions = int(require_row(normalize_row(cursor.fetchone()), "V\u00ednculos n\u00e3o encontrados.")["total"])
+
+        cursor.execute("DELETE FROM budgets WHERE user_id = %s AND category_id = %s", (user_id, category_id))
+        cursor.execute("DELETE FROM categorization_rules WHERE user_id = %s AND category_id = %s", (user_id, category_id))
+
+        should_archive = linked_transactions > 0 or int(category.get("is_default") or 0) == 1
+        if should_archive:
+            cursor.execute(
+                "UPDATE categories SET is_active = FALSE WHERE user_id = %s AND id = %s",
+                (user_id, category_id),
+            )
+            return {"deleted": False, "archived": True, "linkedTransactions": linked_transactions}
+
+        cursor.execute("DELETE FROM categories WHERE user_id = %s AND id = %s", (user_id, category_id))
+        return {"deleted": True, "archived": False, "linkedTransactions": 0}
 
 
 @app.post("/api/transactions")
@@ -4011,7 +4115,7 @@ class PdfReport:
                 f"1.0 w {self.margin:.1f} 42.0 m {self.width - self.margin:.1f} 42.0 l S"
             )
             commands.append(pdf_color_command("#6D7B8D", "rg"))
-            commands.append(f"BT /F2 9 Tf {self.margin:.1f} 24.0 Td (Pulsar) Tj ET")
+            commands.append(f"BT /F2 9 Tf {self.margin:.1f} 24.0 Td (Pulsa) Tj ET")
             commands.append(
                 f"BT /F1 9 Tf {self.width - 96:.1f} 24.0 Td ({pdf_escape(f'Página {index}')}) Tj ET"
             )
@@ -4248,7 +4352,7 @@ def build_report_pdf(report: dict, rows: list[dict], generated_at: datetime) -> 
     growth = report.get("categoryGrowth") or {"hasHistory": False, "items": []}
 
     pdf.rect(0, 0, pdf.width, 92, fill="#0A1728")
-    pdf.text(pdf.margin, 34, "Pulsar", size=23, color="#FFFFFF", bold=True)
+    pdf.text(pdf.margin, 34, "Pulsa", size=23, color="#FFFFFF", bold=True)
     pdf.text(pdf.margin, 58, "Relatório dashboard", size=14, color="#DDFBF1", bold=True)
     pdf.text(pdf.width - 198, 35, f"Mês analisado: {report['month']}", size=10, color="#FFFFFF")
     pdf.text(
@@ -4652,6 +4756,8 @@ def get_future_installments(
         cursor.execute(
             """
             SELECT 
+                t.id,
+                t.installment_group,
                 billing_month,
                 title,
                 COALESCE(c.name, 'Sem categoria') as category_name,
@@ -4676,6 +4782,8 @@ def get_future_installments(
     
     for row in rows:
         installments.append({
+            "id": row["id"],
+            "group": row["installment_group"],
             "month": row["billing_month"],
             "title": row["title"],
             "categoryName": row["category_name"],
@@ -4773,4 +4881,4 @@ else:
 
     @app.get("/")
     def api_root() -> dict:
-        return {"service": "Pulsar API", "docs": "/docs", "health": "/api/health"}
+        return {"service": "Pulsa API", "docs": "/docs", "health": "/api/health"}

@@ -12,6 +12,7 @@ import type {
   TransactionType,
   User
 } from "@/types/finance";
+import { COOKIE_AUTH_TOKEN } from "@/lib/authSession";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "";
 const GET_CACHE_TTL_MS = 30_000;
@@ -68,7 +69,7 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
   }
 
   const headers = new Headers(options.headers);
-  if (options.token) headers.set("Authorization", `Bearer ${options.token}`);
+  if (options.token && options.token !== COOKIE_AUTH_TOKEN) headers.set("Authorization", `Bearer ${options.token}`);
   if (options.body && !(options.body instanceof FormData) && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
   }
@@ -76,7 +77,8 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
   const promise = fetch(`${API_BASE_URL}${path}`, {
     ...options,
     headers,
-    cache: "no-store"
+    cache: "no-store",
+    credentials: "include"
   }).then(async (response) => {
     if (!response.ok) {
       const error = await response.json().catch(() => ({ detail: "Falha na requisição." }));
@@ -156,6 +158,9 @@ export const api = {
   },
   changePassword(token: string, payload: { current_password: string; new_password: string }) {
     return request<{ ok: boolean }>("/api/auth/change-password", { method: "POST", token, body: JSON.stringify(payload) });
+  },
+  logout(token: string) {
+    return request<{ message: string }>("/api/auth/logout", { method: "POST", token });
   },
   bootstrap(token: string, month: string) {
     return request<Bootstrap>(withQuery("/api/bootstrap", { month }), { token });
@@ -242,13 +247,16 @@ export const api = {
     });
   },
   getFutureInstallments(token: string, filters: { month?: string; limit?: number }) {
-    return request<{ installments: Array<{ month: string; title: string; categoryName: string; amount: number; installmentNumber: number; totalInstallments: number }>; totalMonthlyCommitment: number }>(
+    return request<{ installments: Array<{ id: number; group: string; month: string; title: string; categoryName: string; amount: number; installmentNumber: number; totalInstallments: number }>; totalMonthlyCommitment: number }>(
       withQuery("/api/installments/future", filters),
       { token }
     );
   },
   categories(token: string, payload: Pick<Category, "name" | "type" | "color" | "icon">) {
     return request<Category>("/api/categories", { method: "POST", token, body: JSON.stringify(payload) });
+  },
+  deleteCategory(token: string, id: number) {
+    return request<{ deleted: boolean; archived: boolean; linkedTransactions: number }>(`/api/categories/${id}`, { method: "DELETE", token });
   },
   transactions(token: string, filters: TransactionFilters) {
     return request<Transaction[]>(withQuery("/api/transactions", filters), { token });
@@ -290,6 +298,9 @@ export const api = {
   },
   saveBudget(token: string, payload: { categoryId: number; month: string; plannedAmount: number }) {
     return request<{ id: number }>("/api/budgets", { method: "POST", token, body: JSON.stringify(payload) });
+  },
+  deleteBudget(token: string, id: number) {
+    return request<{ deleted: boolean }>(`/api/budgets/${id}`, { method: "DELETE", token });
   },
   copyBudget(token: string, payload: { fromMonth: string; toMonth: string }) {
     return request<BudgetSummary>("/api/budgets/copy", { method: "POST", token, body: JSON.stringify(payload) });

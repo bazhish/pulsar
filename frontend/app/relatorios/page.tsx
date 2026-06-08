@@ -5,19 +5,22 @@ import { AlertTriangle, Download, FileText, TrendingUp, Wallet } from "lucide-re
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { ChartCard } from "@/components/ChartCard";
 import { EmptyState } from "@/components/EmptyState";
+import { FeedbackMessage } from "@/components/FeedbackMessage";
 import { KpiCard } from "@/components/KpiCard";
 import { MonthPicker } from "@/components/MonthPicker";
 import { PageHeader } from "@/components/PageHeader";
 import { SectionIntro } from "@/components/SectionIntro";
 import { Shell } from "@/components/Shell";
 import { api } from "@/lib/api";
+import { COOKIE_AUTH_TOKEN } from "@/lib/authSession";
 import { formatBRL } from "@/lib/format";
 import { useTheme } from "@/lib/theme";
 import { useAuthToken } from "@/lib/useAuthToken";
 import type { ReportSummary } from "@/types/finance";
 
 async function downloadFile(url: string, token: string, filename: string) {
-  const response = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  const headers = token === COOKIE_AUTH_TOKEN ? undefined : { Authorization: `Bearer ${token}` };
+  const response = await fetch(url, { credentials: "include", headers });
   if (!response.ok) throw new Error("Falha ao baixar arquivo.");
   const blob = await response.blob();
   const objectUrl = URL.createObjectURL(blob);
@@ -53,7 +56,7 @@ function GrowthChart({ report }: { report: ReportSummary | null }) {
     return (
       <EmptyState
         title="Ainda não há histórico suficiente para comparar."
-        description="Assim que houver gastos no mês anterior, o Pulsar mostra quais categorias cresceram ou diminuíram."
+        description="Assim que houver gastos no mês anterior, o Pulsa mostra quais categorias cresceram ou diminuíram."
         icon={TrendingUp}
       />
     );
@@ -66,7 +69,7 @@ function GrowthChart({ report }: { report: ReportSummary | null }) {
         const positive = item.delta >= 0;
         const percentLabel = item.percentChange === null ? "Novo histórico" : `${item.percentChange > 0 ? "+" : ""}${item.percentChange.toFixed(1)}%`;
         return (
-          <article className="grid gap-2 rounded-app border border-line bg-surface/85 p-3 text-sm shadow-sm md:grid-cols-[150px_1fr_190px]" key={item.name}>
+          <article className="interactive-list-item grid gap-2 rounded-app border border-line bg-surface/85 p-3 text-sm shadow-sm md:grid-cols-[150px_1fr_190px]" key={item.name}>
             <div className="min-w-0">
               <strong className="block truncate">{item.name}</strong>
               <span className="text-xs text-muted">{formatBRL(item.previousTotal)} → {formatBRL(item.currentTotal)}</span>
@@ -74,7 +77,7 @@ function GrowthChart({ report }: { report: ReportSummary | null }) {
             <div className="relative h-9 rounded-app bg-ink/5">
               <span className="absolute bottom-1 top-1 left-1/2 w-px bg-ink/25" aria-hidden />
               <span
-                className={positive ? "absolute top-2 h-5 rounded-app bg-coral" : "absolute top-2 h-5 rounded-app bg-leaf"}
+                className={positive ? "progress-fill absolute top-2 h-5 rounded-app bg-coral" : "progress-fill absolute top-2 h-5 rounded-app bg-leaf"}
                 style={positive ? { left: "50%", width: `${width}%` } : { right: "50%", width: `${width}%` }}
                 aria-hidden
               />
@@ -131,6 +134,7 @@ export default function RelatoriosPage() {
   const pdfFilename = `pulsar-relatorio-${month}.pdf`;
   const chartGrid = effectiveTheme === "dark" ? "#2D3E55" : "#E5E7EB";
   const chartText = effectiveTheme === "dark" ? "#96A4B8" : "#6D7B8D";
+  const chartStroke = effectiveTheme === "dark" ? "#E8EFF7" : "#102033";
   const tooltipStyle = {
     backgroundColor: effectiveTheme === "dark" ? "#0E1B2D" : "#FFFFFF",
     border: `1px solid ${effectiveTheme === "dark" ? "#2D3E55" : "#DDE7F0"}`,
@@ -149,7 +153,7 @@ export default function RelatoriosPage() {
           title="Relatórios"
         />
 
-        {message ? <p className="app-card mb-4 p-3 text-sm">{message}</p> : null}
+        <FeedbackMessage message={message} />
 
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
           <KpiCard label="Salário" value={formatBRL(report?.dashboard.salaryBase || 0)} />
@@ -202,8 +206,8 @@ export default function RelatoriosPage() {
                     <CartesianGrid strokeDasharray="3 3" stroke={chartGrid} />
                     <XAxis dataKey="name" tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: chartText }} interval={0} angle={-18} textAnchor="end" />
                     <YAxis width={54} tickFormatter={(value) => `R$${Number(value) / 1000}k`} tickLine={false} axisLine={false} tick={{ fill: chartText }} />
-                    <Tooltip contentStyle={tooltipStyle} formatter={(value) => formatBRL(Number(value))} />
-                    <Bar dataKey="total" name="Gasto" fill="#14B8A6" radius={[6, 6, 0, 0]} />
+                    <Tooltip contentStyle={tooltipStyle} cursor={{ fill: effectiveTheme === "dark" ? "#1B2A40" : "#EEF6F8" }} formatter={(value) => formatBRL(Number(value))} />
+                    <Bar dataKey="total" name="Gasto" fill="#14B8A6" radius={[6, 6, 0, 0]} activeBar={{ fillOpacity: 0.88, stroke: chartStroke, strokeWidth: 2 }} isAnimationActive animationDuration={650} animationEasing="ease-out" />
                   </BarChart>
                 </ResponsiveContainer>
               ) : (
@@ -236,8 +240,8 @@ export default function RelatoriosPage() {
                     <CartesianGrid strokeDasharray="3 3" stroke={chartGrid} />
                     <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: chartText }} />
                     <YAxis width={54} tickFormatter={(value) => `R$${Number(value) / 1000}k`} tickLine={false} axisLine={false} tick={{ fill: chartText }} />
-                    <Tooltip contentStyle={tooltipStyle} formatter={(value) => formatBRL(Number(value))} />
-                    <Bar dataKey="total" name="Valor" fill="#4F46E5" radius={[6, 6, 0, 0]} />
+                    <Tooltip contentStyle={tooltipStyle} cursor={{ fill: effectiveTheme === "dark" ? "#1B2A40" : "#EEF6F8" }} formatter={(value) => formatBRL(Number(value))} />
+                    <Bar dataKey="total" name="Valor" fill="#4F46E5" radius={[6, 6, 0, 0]} activeBar={{ fillOpacity: 0.88, stroke: chartStroke, strokeWidth: 2 }} isAnimationActive animationDuration={650} animationEasing="ease-out" />
                   </BarChart>
                 </ResponsiveContainer>
               ) : (
@@ -259,11 +263,11 @@ export default function RelatoriosPage() {
                     <CartesianGrid strokeDasharray="3 3" stroke={chartGrid} />
                     <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: chartText }} />
                     <YAxis width={54} tickFormatter={(value) => `R$${Number(value) / 1000}k`} tickLine={false} axisLine={false} tick={{ fill: chartText }} />
-                    <Tooltip contentStyle={tooltipStyle} formatter={(value) => formatBRL(Number(value))} />
+                    <Tooltip contentStyle={tooltipStyle} cursor={{ fill: effectiveTheme === "dark" ? "#1B2A40" : "#EEF6F8" }} formatter={(value) => formatBRL(Number(value))} />
                     <Legend />
-                    <Bar dataKey="inflow" name="Entradas" fill="#18A957" radius={[4, 4, 0, 0]} />
-                    <Bar dataKey="outflow" name="Saídas" fill="#E14B5A" radius={[4, 4, 0, 0]} />
-                    <Bar dataKey="net" name="Saldo" fill="#2F80ED" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="inflow" name="Entradas" fill="#18A957" radius={[4, 4, 0, 0]} activeBar={{ fillOpacity: 0.88, stroke: chartStroke, strokeWidth: 2 }} isAnimationActive animationDuration={650} animationEasing="ease-out" />
+                    <Bar dataKey="outflow" name="Saídas" fill="#E14B5A" radius={[4, 4, 0, 0]} activeBar={{ fillOpacity: 0.88, stroke: chartStroke, strokeWidth: 2 }} isAnimationActive animationDuration={700} animationEasing="ease-out" />
+                    <Bar dataKey="net" name="Saldo" fill="#2F80ED" radius={[4, 4, 0, 0]} activeBar={{ fillOpacity: 0.88, stroke: chartStroke, strokeWidth: 2 }} isAnimationActive animationDuration={750} animationEasing="ease-out" />
                   </BarChart>
                 </ResponsiveContainer>
               ) : (
@@ -281,7 +285,7 @@ export default function RelatoriosPage() {
           />
           <div className="grid gap-2 md:grid-cols-2">
             {(report?.alerts || []).slice(0, 4).map((alert, index) => (
-              <article className="flex gap-3 rounded-app border border-line bg-surface/85 p-3 text-sm" key={`${alert.message}-${index}`}>
+              <article className="interactive-list-item flex gap-3 rounded-app border border-line bg-surface/85 p-3 text-sm" key={`${alert.message}-${index}`}>
                 <AlertTriangle className={alert.type === "danger" ? "mt-0.5 shrink-0 text-coral" : "mt-0.5 shrink-0 text-amber"} size={18} aria-hidden />
                 <div>
                   <strong className="block">{alert.category}</strong>

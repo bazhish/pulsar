@@ -3,6 +3,7 @@
 import { useId, useState } from "react";
 import { CircleHelp, X } from "lucide-react";
 import { IconButton } from "@/components/IconButton";
+import { useDelayedPresence } from "@/lib/useDelayedPresence";
 
 type HowItWorksProps = {
   title?: string;
@@ -11,6 +12,7 @@ type HowItWorksProps = {
 
 export function HowItWorks({ title = "Como funciona?", text }: HowItWorksProps) {
   const [open, setOpen] = useState(false);
+  const { shouldRender, state } = useDelayedPresence(open, 180);
   const titleId = useId();
   const descriptionId = useId();
 
@@ -21,13 +23,13 @@ export function HowItWorks({ title = "Como funciona?", text }: HowItWorksProps) 
         {title}
       </button>
 
-      {open ? (
-        <div className="fixed inset-0 z-[90] flex items-end bg-ink/45 p-3 backdrop-blur-sm sm:items-center sm:justify-center" role="presentation">
+      {shouldRender ? (
+        <div className={`fixed inset-0 z-[90] flex items-end bg-ink/45 p-3 backdrop-blur-sm sm:items-center sm:justify-center ${state === "open" ? "animate-overlay-in" : "animate-overlay-out"}`} role="presentation">
           <section
             aria-describedby={descriptionId}
             aria-labelledby={titleId}
             aria-modal="true"
-            className="theme-surface w-full rounded-app border p-4 shadow-lift sm:max-w-md"
+            className={`theme-surface w-full rounded-app border p-4 shadow-lift sm:max-w-md ${state === "open" ? "animate-pop-in" : "animate-pop-out"}`}
             role="dialog"
           >
             <div className="flex items-start justify-between gap-3">

@@ -1,14 +1,14 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
-import { ArrowDownCircle, ArrowUpCircle, Pencil, Plus, ReceiptText, Trash2 } from "lucide-react";
+import { ArrowDownCircle, ArrowUpCircle, LoaderCircle, Pencil, Plus, ReceiptText, Trash2 } from "lucide-react";
 import { EmptyState } from "@/components/EmptyState";
 import { ExpenseForm, type MovementFormState } from "@/components/ExpenseForm";
+import { FeedbackMessage } from "@/components/FeedbackMessage";
 import { FirstTimeExplainer } from "@/components/FirstTimeExplainer";
 import { IconButton } from "@/components/IconButton";
 import { IncomeForm } from "@/components/IncomeForm";
 import { MovementTabs } from "@/components/MovementTabs";
-import { MonthPicker } from "@/components/MonthPicker";
 import { PageHeader } from "@/components/PageHeader";
 import { SearchInput } from "@/components/SearchInput";
 import { Select } from "@/components/Select";
@@ -38,7 +38,7 @@ const emptyForm = (month: string, type: TransactionType = "expense"): MovementFo
 
 export default function TransacoesPage() {
   const token = useAuthToken();
-  const [month, setMonth] = useState(new Date().toISOString().slice(0, 7));
+  const [month] = useState(new Date().toISOString().slice(0, 7));
   const [categories, setCategories] = useState<Category[]>([]);
   const [items, setItems] = useState<Transaction[]>([]);
   const [monthItems, setMonthItems] = useState<Transaction[]>([]);
@@ -47,6 +47,8 @@ export default function TransacoesPage() {
   const [typeFilter, setTypeFilter] = useState<TransactionType | "">("expense");
   const [sourceFilter, setSourceFilter] = useState("");
   const [message, setMessage] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
 
   const load = useCallback(async () => {
     if (!token) return;
@@ -70,18 +72,13 @@ export default function TransacoesPage() {
   }), [monthItems]);
 
   async function handleCreateCategory(category: { name: string; type: TransactionType; color: string; icon: string }) {
-    if (!token) return;
+    if (!token) throw new Error("Sessao expirada.");
+    setSaving(true);
     try {
-      // API call would be made here if backend supports it
-      const newCategory: Category = {
-        id: Math.random() as unknown as number,
-        name: category.name,
-        type: category.type,
-        color: category.color,
-        icon: category.icon
-      };
-      setCategories([...categories, newCategory]);
+      const newCategory = await api.categories(token, category);
+      setCategories((current) => [...current.filter((item) => item.id !== newCategory.id), newCategory]);
       setMessage("Categoria criada com sucesso.");
+      return newCategory;
     } catch (err) {
       setMessage(err instanceof Error ? err.message : "Falha ao criar categoria.");
       throw err;
@@ -131,6 +128,8 @@ export default function TransacoesPage() {
       await load();
     } catch (err) {
       setMessage(err instanceof Error ? err.message : "Falha ao salvar.");
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -176,7 +175,6 @@ export default function TransacoesPage() {
     <Shell>
       <div className="mx-auto max-w-6xl px-4 py-5 sm:py-6">
         <PageHeader
-          actions={<MonthPicker value={month} onChange={(value) => { setMonth(value); setForm(emptyForm(value, form.type)); }} />}
           description="Separe entradas e despesas sem precisar entender termos técnicos."
           helpText="Cadastre entradas e despesas para acompanhar seu fluxo financeiro. Use categorias e formas de pagamento para entender seus hábitos."
           icon={ReceiptText}
@@ -189,7 +187,7 @@ export default function TransacoesPage() {
           description="Use Nova despesa para gastos e Nova entrada para salário, freelas ou outras receitas. A lista abaixo pode mostrar tudo junto ou separado."
         />
 
-        {message ? <p className="app-card mb-4 p-3 text-sm text-ink">{message}</p> : null}
+        <FeedbackMessage message={message} />
 
         <section className="mb-4 grid gap-3 sm:grid-cols-2">
           <button

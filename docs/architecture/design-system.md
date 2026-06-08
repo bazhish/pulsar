@@ -25,9 +25,7 @@ Componentes:
 - `KpiCard`, `ChartCard`, `MonthPicker`.
 - Formularios com `.field`, `.btn-primary`, `.btn-secondary`.
 
-Assets:
+Identidade:
 
-- `frontend/public/logo.svg`
-- `frontend/public/logo-mark.svg`
-
-A logo combina monograma RF, linha de pulso e fluxo circular abstrato.
+- O app usa o nome `Pulsa` e um monograma simples `P`.
+- Evitar imagens de logo no shell, login e header; preferir texto e o monograma tipografico.

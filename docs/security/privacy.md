@@ -2,7 +2,7 @@
 
 ## Dados tratados
 
-O Pulsar trata dados de conta e dados financeiros informados pelo usuario:
+O Pulsa trata dados de conta e dados financeiros informados pelo usuario:
 
 - nome, e-mail, foto de perfil e preferencias;
 - salario/base mensal, metas, orcamentos e reserva;

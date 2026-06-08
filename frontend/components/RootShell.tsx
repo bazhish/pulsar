@@ -4,11 +4,13 @@ import { usePathname } from "next/navigation";
 import { AppShell } from "@/components/AppShell";
 
 const appRoutes = [
+  "/configuracoes",
   "/dashboard",
   "/importar",
   "/metas",
   "/onboarding",
   "/orcamento",
+  "/parcelas",
   "/perfil",
   "/relatorios",
   "/transacoes"
