@@ -1,14 +1,16 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { ChangeEvent, FormEvent, useCallback, useEffect, useRef, useState } from "react";
-import { Camera, Mail, Trash2, Upload, UserRound, WalletCards } from "lucide-react";
+import { Camera, Download, Mail, ShieldAlert, Trash2, Upload, UserRound, WalletCards } from "lucide-react";
 import { FeedbackMessage } from "@/components/FeedbackMessage";
 import { KpiCard } from "@/components/KpiCard";
 import { PageHeader } from "@/components/PageHeader";
 import { SectionIntro } from "@/components/SectionIntro";
 import { Shell } from "@/components/Shell";
 import { api, apiAssetUrl } from "@/lib/api";
+import { COOKIE_AUTH_TOKEN, clearSession } from "@/lib/authSession";
 import { formatBRL } from "@/lib/format";
 import { useAuthToken } from "@/lib/useAuthToken";
 import type { Bootstrap, User } from "@/types/finance";
@@ -48,6 +50,7 @@ function ProfilePhoto({ initials, name, preview }: { initials: string; name: str
 
 export default function PerfilPage() {
   const token = useAuthToken();
+  const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
   const [boot, setBoot] = useState<Bootstrap | null>(null);
   const [profile, setProfile] = useState<ProfileForm>({ name: "" });
@@ -55,6 +58,8 @@ export default function PerfilPage() {
   const [photoPreview, setPhotoPreview] = useState("");
   const [message, setMessage] = useState("");
   const [savingProfile, setSavingProfile] = useState(false);
+  const [deletePassword, setDeletePassword] = useState("");
+  const [deleting, setDeleting] = useState(false);
   const objectUrlRef = useRef<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const month = new Date().toISOString().slice(0, 7);
@@ -165,6 +170,44 @@ export default function PerfilPage() {
     setMessage("Senha atualizada.");
   }
 
+  async function exportData() {
+    if (!token) return;
+    try {
+      const res = await fetch(api.exportDataUrl(), {
+        credentials: "include",
+        headers: token && token !== COOKIE_AUTH_TOKEN ? { Authorization: `Bearer ${token}` } : {}
+      });
+      if (!res.ok) throw new Error("Falha ao exportar dados.");
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = "pulsa-meus-dados.json";
+      anchor.click();
+      URL.revokeObjectURL(url);
+      setMessage("Exportação gerada. Verifique seus downloads.");
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "Falha ao exportar dados.");
+    }
+  }
+
+  async function deleteAccount(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!token) return;
+    if (!window.confirm("Isto apaga permanentemente sua conta e TODOS os seus dados. Esta ação não pode ser desfeita. Continuar?")) {
+      return;
+    }
+    setDeleting(true);
+    try {
+      await api.deleteAccount(token, deletePassword || undefined);
+      clearSession();
+      router.replace("/login");
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "Falha ao excluir a conta.");
+      setDeleting(false);
+    }
+  }
+
   const initials = initialsFromUser(user);
   const displayName = user?.name || profile.name || "Perfil";
 
@@ -262,6 +305,39 @@ export default function PerfilPage() {
             <button className="btn-secondary" type="submit">Trocar senha</button>
           </div>
         </form>
+
+        <section className="app-card mt-4 p-4">
+          <SectionIntro
+            title="Privacidade e dados (LGPD)"
+            description="Você pode baixar todos os seus dados ou excluir permanentemente sua conta a qualquer momento."
+            action={<ShieldAlert size={18} className="text-pulse" />}
+          />
+          <button className="btn-secondary" type="button" onClick={exportData}>
+            <Download size={16} aria-hidden />
+            Exportar meus dados (JSON)
+          </button>
+
+          <form onSubmit={deleteAccount} className="mt-4 rounded-app border border-coral/40 bg-coral/5 p-3">
+            <p className="text-sm font-bold text-coral">Excluir conta</p>
+            <p className="mt-1 text-xs text-muted">
+              Apaga permanentemente sua conta, transações, cartões, orçamentos e foto. Não é reversível.
+            </p>
+            <div className="mt-3 grid gap-3 sm:grid-cols-[1fr_auto]">
+              <input
+                className="field"
+                type="password"
+                placeholder="Confirme sua senha (deixe vazio se usou login social)"
+                value={deletePassword}
+                onChange={(event) => setDeletePassword(event.target.value)}
+                autoComplete="current-password"
+              />
+              <button className="btn-secondary border-coral text-coral" type="submit" disabled={deleting}>
+                <Trash2 size={16} aria-hidden />
+                {deleting ? "Excluindo..." : "Excluir minha conta"}
+              </button>
+            </div>
+          </form>
+        </section>
       </div>
     </Shell>
   );

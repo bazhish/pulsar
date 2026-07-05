@@ -41,11 +41,16 @@ export default function CadastroPage() {
       setError("As senhas não coincidem.");
       return;
     }
+    if (!form.get("accept_terms")) {
+      setError("É necessário aceitar a Política de Privacidade e os Termos.");
+      return;
+    }
     try {
       await api.register({
         name: String(form.get("name")),
         email: String(form.get("email")),
-        password
+        password,
+        acceptTerms: true
       });
       rememberSession();
       router.replace("/onboarding");
@@ -104,6 +109,17 @@ export default function CadastroPage() {
                 minLength={8}
                 required
               />
+            </label>
+
+            <label className="mt-4 flex items-start gap-2 text-sm text-muted">
+              <input className="mt-0.5" name="accept_terms" type="checkbox" value="1" required />
+              <span>
+                Li e aceito a{" "}
+                <Link className="font-bold text-plum underline" href="/privacidade" target="_blank">
+                  Política de Privacidade
+                </Link>{" "}
+                e o tratamento dos meus dados conforme a LGPD.
+              </span>
             </label>
 
             {error ? <p className="mt-3 rounded-app bg-coral/10 p-3 text-sm text-coral">{error}</p> : null}

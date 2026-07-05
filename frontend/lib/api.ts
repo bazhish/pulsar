@@ -131,11 +131,29 @@ export const api = {
   oauthAuthorizeUrl(provider: OAuthProviderKey) {
     return `${API_BASE_URL}/api/auth/oauth/${provider}/authorize`;
   },
-  register(payload: { name: string; email: string; password: string }) {
+  register(payload: { name: string; email: string; password: string; acceptTerms: boolean }) {
+    const { acceptTerms, ...rest } = payload;
     return request<{ access_token: string; token_type: string }>("/api/auth/register", {
       method: "POST",
+      body: JSON.stringify({ ...rest, accept_terms: acceptTerms })
+    });
+  },
+  deleteAccount(token: string, password?: string) {
+    return request<{ deleted: boolean }>("/api/auth/me", {
+      method: "DELETE",
+      token,
+      body: JSON.stringify({ password: password ?? null })
+    });
+  },
+  updateConsent(token: string, payload: { scope: "monthly_summary" | "terms_privacy"; granted: boolean }) {
+    return request<{ scope: string; granted: boolean; policy_version: string }>("/api/privacy/consent", {
+      method: "POST",
+      token,
       body: JSON.stringify(payload)
     });
+  },
+  exportDataUrl() {
+    return `${API_BASE_URL}/api/privacy/export`;
   },
   login(email: string, password: string) {
     const body = new URLSearchParams({ email, password });

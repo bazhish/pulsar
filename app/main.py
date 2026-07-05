@@ -19,6 +19,7 @@ from uuid import UUID
 
 from dotenv import load_dotenv
 from fastapi import Cookie, Depends, FastAPI, File, Form, Header, HTTPException, Query, Request, UploadFile, status
+from fastapi.encoders import jsonable_encoder
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.security import OAuth2PasswordBearer
@@ -53,6 +54,12 @@ from app.core.security import (
     validate_pin,
     verify_password,
     verify_pin,
+)
+from app.core import storage
+from app.privacy.service import (
+    POLICY_VERSION,
+    build_data_export,
+    record_consent,
 )
 from app.oauth import (
     OAUTH_STATE_COOKIE,
@@ -128,6 +135,13 @@ logger = logging.getLogger("ritmo_financeiro")
 
 def email_hash(email: str) -> str:
     return hashlib.sha256(email.encode()).hexdigest()[:16]
+
+
+def client_ip_hash(request: Request) -> str | None:
+    ip = request.client.host if request.client else ""
+    if not ip:
+        return None
+    return hashlib.sha256(ip.encode()).hexdigest()[:16]
 
 
 def audit_log(event: str, user_id: str | None, details: dict | None = None) -> None:
@@ -559,13 +573,9 @@ def detect_profile_photo_extension(content_type: str | None, content: bytes) -> 
 
 
 def delete_profile_photo_file(avatar_url: str | None) -> None:
-    if not avatar_url or not avatar_url.startswith(f"{PROFILE_PHOTO_URL_PREFIX}/"):
-        return
-    filename = avatar_url.rsplit("/", 1)[-1]
-    target = (PROFILE_PHOTO_DIR / filename).resolve()
-    if target.parent != PROFILE_PHOTO_DIR.resolve():
-        return
-    target.unlink(missing_ok=True)
+    # Delegates to the storage layer, which handles both Supabase and local disk
+    # references (and ignores external OAuth avatar URLs).
+    storage.remove_avatar(avatar_url)
 
 
 def validate_date_text(value: str, field_name: str) -> str:
@@ -776,7 +786,7 @@ def public_user(user: dict) -> dict:
         "id": str(user["id"]),
         "email": user["email"],
         "name": user["name"],
-        "avatar_url": user.get("avatar_url"),
+        "avatar_url": storage.resolve_avatar_url(user.get("avatar_url")),
         "send_monthly_summary": bool(user.get("send_monthly_summary", False)),
         "is_active": bool(user["is_active"]),
         "created_at": user.get("created_at"),
@@ -2515,6 +2525,22 @@ class RegisterPayload(BaseModel):
     email: str = Field(..., min_length=3, max_length=255)
     password: str = Field(..., min_length=8, max_length=72)
     name: str = Field(..., min_length=1, max_length=100)
+    accept_terms: bool = False
+
+    class Config:
+        extra = "forbid"
+
+
+class DeleteAccountPayload(BaseModel):
+    password: Optional[str] = None
+
+    class Config:
+        extra = "forbid"
+
+
+class ConsentPayload(BaseModel):
+    scope: str = Field(..., min_length=1, max_length=50)
+    granted: bool
 
     class Config:
         extra = "forbid"
@@ -2893,7 +2919,10 @@ def register(request: Request, response: Response, payload: RegisterPayload) -> 
     email = normalize_email(payload.email)
     name = clean_text(payload.name, "Nome", 100)
     validate_password_strength(payload.password)
+    if not payload.accept_terms:
+        raise HTTPException(status_code=400, detail="\u00c9 necess\u00e1rio aceitar a Pol\u00edtica de Privacidade e os Termos.")
 
+    ip_hash = client_ip_hash(request)
     try:
         with db_cursor(commit=True) as cursor:
             cursor.execute(
@@ -2907,6 +2936,7 @@ def register(request: Request, response: Response, payload: RegisterPayload) -> 
             )
             user = require_row(normalize_row(cursor.fetchone()), "Usu\u00e1rio n\u00e3o criado.")
             ensure_user_defaults_for_cursor(cursor, user["id"])
+            record_consent(cursor, user["id"], scope="terms_privacy", granted=True, ip_hash=ip_hash, channel="register")
     except errors.UniqueViolation:
         audit_log("user_register_failed", None, {"email_hash": email_hash(email), "reason": "duplicate"})
         raise HTTPException(status_code=400, detail="E-mail j\u00e1 cadastrado.")
@@ -3062,13 +3092,11 @@ async def upload_profile_photo(
 
     extension = detect_profile_photo_extension(file.content_type, content)
     user_id = str(current_user["id"])
-    filename = f"{user_id}-{secrets.token_hex(8)}.{extension}"
-    target = (PROFILE_PHOTO_DIR / filename).resolve()
-    if target.parent != PROFILE_PHOTO_DIR.resolve():
+    normalized_type = (file.content_type or "").split(";")[0].strip().lower() or "application/octet-stream"
+    try:
+        avatar_url = storage.store_avatar(user_id, content, extension, normalized_type)
+    except ValueError:
         raise HTTPException(status_code=400, detail="Nome de arquivo inválido.")
-
-    target.write_bytes(content)
-    avatar_url = f"{PROFILE_PHOTO_URL_PREFIX}/{filename}"
     previous_avatar_url = current_user.get("avatar_url")
 
     with db_cursor(commit=True) as cursor:
@@ -3147,6 +3175,87 @@ def logout(
     revoke_token(token, current_user["id"])
     clear_auth_cookie(response)
     return {"message": "Sessão encerrada no servidor."}
+
+
+@app.delete("/api/auth/me")
+@limiter.limit("5 per 1 hour")
+def delete_account(
+    request: Request,
+    response: Response,
+    payload: DeleteAccountPayload,
+    token: str | None = Depends(oauth2_scheme),
+    cookie_token: str | None = Cookie(default=None, alias=AUTH_COOKIE_NAME),
+    current_user: dict = Depends(get_current_user),
+) -> dict:
+    """LGPD Art. 18, IV — direito de eliminação.
+
+    Exige reautenticação por senha (contas com senha); as FKs ON DELETE CASCADE
+    em user_id removem settings/categorias/transações/cartões/orçamentos/etc.
+    """
+    user = get_user_by_id(current_user["id"])
+    if user and user.get("hashed_password"):
+        if not payload.password or not verify_password(payload.password, user["hashed_password"]):
+            raise HTTPException(status_code=400, detail="Senha incorreta.")
+
+    avatar_ref = user.get("avatar_url") if user else None
+    with db_cursor(commit=True) as cursor:
+        cursor.execute("DELETE FROM users WHERE id = %s", (current_user["id"],))
+
+    storage.remove_avatar(avatar_ref)
+    active_token = token or cookie_token
+    if active_token:
+        revoke_token(active_token, current_user["id"])
+    clear_auth_cookie(response)
+    audit_log("account_deleted", current_user["id"])
+    return {"deleted": True}
+
+
+@app.get("/api/privacy/export")
+@limiter.limit("10 per 1 hour")
+def export_my_data(request: Request, current_user: dict = Depends(get_current_user)) -> Response:
+    """LGPD Art. 18 — acesso e portabilidade: todos os dados do titular em JSON."""
+    with db_cursor() as cursor:
+        data = build_data_export(cursor, current_user["id"])
+    body = json.dumps(jsonable_encoder(data), ensure_ascii=False, indent=2)
+    audit_log("data_exported", current_user["id"])
+    return Response(
+        content=body,
+        media_type="application/json",
+        headers={"Content-Disposition": 'attachment; filename="pulsa-meus-dados.json"'},
+    )
+
+
+@app.post("/api/privacy/consent")
+def update_consent(
+    request: Request,
+    payload: ConsentPayload,
+    current_user: dict = Depends(get_current_user),
+) -> dict:
+    """Registra concessão/revogação de consentimento (Arts. 7/8).
+
+    Para recursos opcionais (ex.: resumo mensal), mantém o flag do usuário em
+    sincronia com o ledger de consentimento.
+    """
+    allowed_scopes = {"monthly_summary", "terms_privacy"}
+    if payload.scope not in allowed_scopes:
+        raise HTTPException(status_code=400, detail="Escopo de consentimento inválido.")
+
+    ip_hash = client_ip_hash(request)
+    with db_cursor(commit=True) as cursor:
+        record_consent(
+            cursor,
+            current_user["id"],
+            scope=payload.scope,
+            granted=payload.granted,
+            ip_hash=ip_hash,
+            channel="settings",
+        )
+        if payload.scope == "monthly_summary":
+            cursor.execute(
+                "UPDATE users SET send_monthly_summary = %s WHERE id = %s",
+                (payload.granted, current_user["id"]),
+            )
+    return {"scope": payload.scope, "granted": payload.granted, "policy_version": POLICY_VERSION}
 
 
 @app.get("/api/bootstrap")
