@@ -24,7 +24,6 @@ from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.security import OAuth2PasswordBearer
 from fastapi.staticfiles import StaticFiles
 from jose import JWTError, jwt
-from passlib.context import CryptContext
 from psycopg2 import errors
 from psycopg2.extras import Json
 from pydantic import BaseModel, Field
@@ -43,6 +42,17 @@ from app.core.database import (
     get_database_url,
     init_db_pool,
     storage_available,
+)
+from app.core.security import (
+    DUMMY_PASSWORD_HASH,
+    create_access_token,
+    hash_password,
+    hash_pin,
+    token_hash,
+    validate_password_strength,
+    validate_pin,
+    verify_password,
+    verify_pin,
 )
 from app.oauth import (
     OAUTH_STATE_COOKIE,
@@ -131,18 +141,6 @@ def audit_log(event: str, user_id: str | None, details: dict | None = None) -> N
     logger.info(json.dumps(entry))
 
 
-password_context = CryptContext(
-    schemes=["bcrypt"],
-    deprecated="auto",
-    bcrypt__rounds=12,
-    bcrypt__truncate_error=True,
-)
-pin_context = CryptContext(
-    schemes=["bcrypt"],
-    deprecated="auto",
-    bcrypt__rounds=10,
-    bcrypt__truncate_error=True,
-)
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login", auto_error=False)
 limiter = Limiter(key_func=get_remote_address)
 card_pin_failures: dict[str, dict[str, Any]] = {}
@@ -151,9 +149,6 @@ csv_import_sessions: dict[str, dict[str, Any]] = {}
 login_failures: dict[str, dict[str, Any]] = {}
 revoked_token_hashes: set[str] = set()
 startup_time = time.time()
-
-# Used so login performs a bcrypt verification even when the email does not exist.
-DUMMY_PASSWORD_HASH = password_context.hash("DummyPassword1")
 
 DEFAULT_CATEGORIES: list[tuple[str, str, str, str, int]] = [
     ("Sal\u00e1rio", "income", "#9be768", "\U0001f4bc", 1),
@@ -298,10 +293,6 @@ def validate_runtime_config() -> None:
             raise RuntimeError("ALLOWED_ORIGINS de produ\u00e7\u00e3o n\u00e3o deve apontar para localhost.")
         if "*" in origins:
             logger.warning("ALLOWED_ORIGINS is '*' in production. Use only during the first deploy and replace it with the public HTTPS URL.")
-
-
-def token_hash(token: str) -> str:
-    return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
 def decode_token_metadata(token: str) -> tuple[str | None, datetime | None]:
@@ -604,27 +595,6 @@ def normalize_email(value: str) -> str:
     return email
 
 
-def validate_password_strength(password: str) -> None:
-    if len(password) < 8:
-        raise HTTPException(status_code=400, detail="A senha deve ter pelo menos 8 caracteres.")
-    if len(password) > 72:
-        raise HTTPException(status_code=400, detail="A senha excede o tamanho permitido.")
-    if len(password.encode("utf-8")) > 72:
-        raise HTTPException(status_code=400, detail="A senha n\u00e3o pode exceder 72 bytes.")
-    if not any(char.isdigit() for char in password):
-        raise HTTPException(status_code=400, detail="A senha deve conter pelo menos 1 n\u00famero.")
-    if not any(char.isupper() for char in password):
-        raise HTTPException(status_code=400, detail="A senha deve conter pelo menos 1 letra mai\u00fascula.")
-
-
-def hash_password(password: str) -> str:
-    return password_context.hash(password)
-
-
-def verify_password(password: str, hashed_password: str) -> bool:
-    return bool(password_context.verify(password, hashed_password))
-
-
 def login_failure_key(email: str) -> str:
     return email_hash(email.strip().lower())
 
@@ -738,28 +708,6 @@ def clear_login_failures(email: str) -> None:
             cursor.execute("DELETE FROM login_failures_state WHERE identifier_hash = %s", (key,))
     except Exception:
         logger.exception("Failed to clear login failure state")
-
-
-def validate_pin(pin: str) -> str:
-    cleaned = pin.strip()
-    if not cleaned.isdigit() or not 4 <= len(cleaned) <= 6:
-        raise HTTPException(status_code=400, detail="PIN deve conter de 4 a 6 d\u00edgitos num\u00e9ricos.")
-    return cleaned
-
-
-def hash_pin(pin: str) -> str:
-    return pin_context.hash(pin)
-
-
-def verify_pin(pin: str, pin_hash: str) -> bool:
-    return bool(pin_context.verify(pin, pin_hash))
-
-
-def create_access_token(user_id: str) -> str:
-    issued_at = datetime.now(timezone.utc)
-    expires_at = issued_at + timedelta(hours=ACCESS_TOKEN_EXPIRE_HOURS)
-    payload = {"sub": str(user_id), "iat": int(issued_at.timestamp()), "exp": int(expires_at.timestamp())}
-    return jwt.encode(payload, get_jwt_secret(), algorithm=JWT_ALGORITHM)
 
 
 def set_auth_cookie(response: Response, token: str) -> None:
