@@ -5,20 +5,22 @@ import os
 import secrets
 import time
 from dataclasses import dataclass
-from typing import Any, Callable, Optional
+from typing import Callable, Optional
 from urllib.parse import urlencode
 
 import httpx
 from fastapi import HTTPException
 from fastapi.responses import RedirectResponse
+from jose import JWTError, jwt
+
+from app.core.config import settings
 
 logger = logging.getLogger("ritmo_financeiro.oauth")
 
 OAUTH_STATE_TTL_SECONDS = 10 * 60
 OAUTH_STATE_COOKIE = "pulsar_oauth_state"
+OAUTH_STATE_ALG = "HS256"
 OAUTH_PROVIDERS = ("google", "github", "facebook")
-
-_oauth_states: dict[str, dict[str, Any]] = {}
 
 
 @dataclass(frozen=True)
@@ -186,26 +188,33 @@ def list_providers() -> dict[str, dict[str, bool]]:
     return payload
 
 
-def _purge_expired_states() -> None:
-    now = time.time()
-    expired = [key for key, value in _oauth_states.items() if now - value["created_at"] > OAUTH_STATE_TTL_SECONDS]
-    for key in expired:
-        _oauth_states.pop(key, None)
-
-
 def create_oauth_state(provider: str) -> str:
-    _purge_expired_states()
-    state = secrets.token_urlsafe(32)
-    _oauth_states[state] = {"provider": provider, "created_at": time.time()}
-    return state
+    """Stateless, signed OAuth state.
+
+    The provider and expiry are carried inside a signed token (no server-side
+    storage), so authorize and callback can be served by different serverless
+    invocations. The same value is mirrored in an HttpOnly cookie for CSRF
+    (double-submit) protection.
+    """
+    now = int(time.time())
+    payload = {
+        "provider": provider,
+        "iat": now,
+        "exp": now + OAUTH_STATE_TTL_SECONDS,
+        "nonce": secrets.token_urlsafe(16),
+    }
+    return jwt.encode(payload, settings.require_jwt_secret(), algorithm=OAUTH_STATE_ALG)
 
 
 def consume_oauth_state(state: str, provider: str, cookie_state: str | None) -> None:
-    _purge_expired_states()
-    entry = _oauth_states.pop(state, None)
+    # Double-submit: the state in the URL must match the one in the cookie.
     if not cookie_state or not secrets.compare_digest(state, cookie_state):
         raise HTTPException(status_code=400, detail="State OAuth inválido ou expirado.")
-    if not entry or entry.get("provider") != provider:
+    try:
+        payload = jwt.decode(state, settings.require_jwt_secret(), algorithms=[OAUTH_STATE_ALG])
+    except JWTError:
+        raise HTTPException(status_code=400, detail="State OAuth inválido ou expirado.")
+    if payload.get("provider") != provider:
         raise HTTPException(status_code=400, detail="State OAuth inválido ou expirado.")
 
 

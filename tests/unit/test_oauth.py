@@ -1,9 +1,32 @@
 from __future__ import annotations
 
 import pytest
+from fastapi import HTTPException
 from httpx import ASGITransport, AsyncClient
 
 from app.main import app
+from app.oauth import consume_oauth_state, create_oauth_state
+
+
+def test_oauth_state_is_stateless_and_signed(monkeypatch):
+    monkeypatch.setenv("JWT_SECRET_KEY", "unit-secret-key-for-tests-32-chars")
+    state = create_oauth_state("google")
+
+    # No server-side storage is consulted: validation relies only on the signed
+    # token plus the double-submit cookie, so any invocation can validate it.
+    consume_oauth_state(state, "google", state)
+
+    # Provider mismatch is rejected.
+    with pytest.raises(HTTPException):
+        consume_oauth_state(state, "github", state)
+
+    # Missing cookie (CSRF double-submit) is rejected.
+    with pytest.raises(HTTPException):
+        consume_oauth_state(state, "google", None)
+
+    # Tampered/forged state fails signature verification.
+    with pytest.raises(HTTPException):
+        consume_oauth_state(state + "x", "google", state + "x")
 
 
 @pytest.mark.asyncio
