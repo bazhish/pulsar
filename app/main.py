@@ -78,6 +78,11 @@ FRONTEND_OUT_DIR = BASE_DIR / "frontend" / "out"
 JWT_ALGORITHM = settings.jwt_algorithm
 ACCESS_TOKEN_EXPIRE_HOURS = settings.access_token_expire_hours
 AUTH_COOKIE_NAME = "pulsa_access_token"
+CSRF_COOKIE_NAME = "pulsa_csrf"
+CSRF_HEADER_NAME = "X-CSRF-Token"
+# State-changing endpoints reached before a session cookie exists (so no CSRF risk).
+CSRF_EXEMPT_PATHS = {"/api/auth/login", "/api/auth/register", "/api/auth/csrf"}
+CSRF_SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
 CARD_UNLOCK_SECONDS = 15 * 60
 PIN_FAILURE_WINDOW_SECONDS = 5 * 60
 PIN_MAX_ATTEMPTS = 3
@@ -241,6 +246,29 @@ async def validate_content_type(request: Request, call_next):
 
 
 @app.middleware("http")
+async def csrf_protect(request: Request, call_next):
+    # Double-submit CSRF: for state-changing /api requests authenticated by the
+    # session cookie (not a Bearer token), require the X-CSRF-Token header to
+    # match the pulsa_csrf cookie. Bearer/API clients are exempt, and requests
+    # before login (no auth cookie yet) are naturally exempt.
+    path = request.url.path
+    if (
+        request.method not in CSRF_SAFE_METHODS
+        and path.startswith("/api/")
+        and path not in CSRF_EXEMPT_PATHS
+        and not path.startswith("/api/auth/oauth/")
+    ):
+        has_bearer = request.headers.get("authorization", "").lower().startswith("bearer ")
+        auth_cookie = request.cookies.get(AUTH_COOKIE_NAME)
+        if auth_cookie and not has_bearer:
+            cookie_csrf = request.cookies.get(CSRF_COOKIE_NAME)
+            header_csrf = request.headers.get(CSRF_HEADER_NAME)
+            if not cookie_csrf or not header_csrf or not secrets.compare_digest(cookie_csrf, header_csrf):
+                return JSONResponse({"detail": "CSRF token inválido ou ausente."}, status_code=403)
+    return await call_next(request)
+
+
+@app.middleware("http")
 async def add_security_headers(request: Request, call_next):
     started_at = time.perf_counter()
     try:
@@ -277,16 +305,20 @@ async def add_security_headers(request: Request, call_next):
         response.headers["Pragma"] = "no-cache"
     if is_production():
         response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    # 'unsafe-inline' on script-src is required by Next.js static export (inline
+    # hydration bootstrap, no nonce support in export mode). External script/font
+    # origins are dropped since the frontend self-hosts everything.
     response.headers["Content-Security-Policy"] = (
         "default-src 'self'; "
-        "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://fonts.googleapis.com; "
-        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
-        "font-src 'self' https://fonts.gstatic.com; "
+        "script-src 'self' 'unsafe-inline'; "
+        "style-src 'self' 'unsafe-inline'; "
+        "font-src 'self'; "
         "img-src 'self' data: https:; "
         "connect-src 'self'; "
         "object-src 'none'; "
         "frame-ancestors 'none'; "
         "base-uri 'self'; "
+        "form-action 'self'; "
         "upgrade-insecure-requests"
     )
     return response
@@ -730,10 +762,29 @@ def set_auth_cookie(response: Response, token: str) -> None:
         samesite="lax",
         secure=is_production(),
     )
+    # Pair every session with a fresh CSRF token (double-submit).
+    issue_csrf_cookie(response)
 
 
 def clear_auth_cookie(response: Response) -> None:
     response.delete_cookie(AUTH_COOKIE_NAME, path="/", samesite="lax", secure=is_production())
+    response.delete_cookie(CSRF_COOKIE_NAME, path="/", samesite="lax", secure=is_production())
+
+
+def issue_csrf_cookie(response: Response) -> str:
+    # Readable by JS (not HttpOnly) so the SPA can echo it in the X-CSRF-Token
+    # header — that echo is what proves same-origin (double-submit).
+    token = secrets.token_urlsafe(32)
+    response.set_cookie(
+        CSRF_COOKIE_NAME,
+        token,
+        httponly=False,
+        max_age=ACCESS_TOKEN_EXPIRE_HOURS * 3600,
+        path="/",
+        samesite="lax",
+        secure=is_production(),
+    )
+    return token
 
 
 def revoke_token(token: str, user_id: str | None = None) -> None:
@@ -3027,6 +3078,12 @@ def login(
 @app.get("/api/auth/me")
 def me(current_user: dict = Depends(get_current_user)) -> dict:
     return current_user
+
+
+@app.get("/api/auth/csrf")
+def get_csrf(response: Response, current_user: dict = Depends(get_current_user)) -> dict:
+    token = issue_csrf_cookie(response)
+    return {"csrf_token": token}
 
 
 @app.put("/api/auth/me")

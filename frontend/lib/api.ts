@@ -29,6 +29,31 @@ type CacheEntry = {
 const responseCache = new Map<string, CacheEntry>();
 const pendingRequests = new Map<string, Promise<unknown>>();
 
+const CSRF_COOKIE = "pulsa_csrf";
+const CSRF_HEADER = "X-CSRF-Token";
+const CSRF_EXEMPT_PATHS = new Set(["/api/auth/login", "/api/auth/register"]);
+
+function readCookie(name: string): string | null {
+  if (typeof document === "undefined") return null;
+  const match = document.cookie.match(new RegExp(`(?:^|; )${name}=([^;]*)`));
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
+async function ensureCsrfToken(): Promise<string | null> {
+  const existing = readCookie(CSRF_COOKIE);
+  if (existing) return existing;
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/auth/csrf`, { credentials: "include" });
+    if (res.ok) {
+      const data = await res.json().catch(() => null);
+      if (data?.csrf_token) return data.csrf_token as string;
+    }
+  } catch {
+    // ignore — request will fail with a clear CSRF error if truly missing
+  }
+  return readCookie(CSRF_COOKIE);
+}
+
 function cacheKey(path: string, token?: string | null) {
   return `${token || "public"}::${path}`;
 }
@@ -69,9 +94,16 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
   }
 
   const headers = new Headers(options.headers);
-  if (options.token && options.token !== COOKIE_AUTH_TOKEN) headers.set("Authorization", `Bearer ${options.token}`);
+  const usingBearer = Boolean(options.token && options.token !== COOKIE_AUTH_TOKEN);
+  if (usingBearer) headers.set("Authorization", `Bearer ${options.token}`);
   if (options.body && !(options.body instanceof FormData) && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
+  }
+
+  // Cookie-authenticated state changes need the CSRF double-submit header.
+  if (!isGet && !usingBearer && !CSRF_EXEMPT_PATHS.has(path)) {
+    const csrf = await ensureCsrfToken();
+    if (csrf) headers.set(CSRF_HEADER, csrf);
   }
 
   const promise = fetch(`${API_BASE_URL}${path}`, {
