@@ -1,0 +1,9 @@
+tests/
+docs/
+data/
+.pytest_cache/
+.ruff_cache/
+__pycache__/
+.coverage
+coverage.xml
+*.md

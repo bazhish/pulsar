@@ -1,0 +1,15 @@
+{
+  "version": 2,
+  "builds": [
+    { "src": "api/index.py", "use": "@vercel/python" },
+    { "src": "frontend/package.json", "use": "@vercel/static-build", "config": { "distDir": "out" } }
+  ],
+  "routes": [
+    { "src": "/api/(.*)", "dest": "/api/index.py" },
+    { "handle": "filesystem" },
+    { "src": "/_next/(.*)", "dest": "/frontend/out/_next/$1" },
+    { "src": "/((?!api/).*)\\.html", "dest": "/frontend/out/$1.html" },
+    { "src": "/([^.]+)", "dest": "/frontend/out/$1.html" },
+    { "src": "/(.*)", "dest": "/frontend/out/index.html" }
+  ]
+}

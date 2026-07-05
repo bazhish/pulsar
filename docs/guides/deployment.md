@@ -1,5 +1,48 @@
 # Deploy e ambientes
 
+## Vercel (deploy primário)
+
+Projeto único unificado: o frontend Next é servido como estático pela CDN da
+Vercel e o FastAPI roda como **Python Serverless Function** (`api/index.py`), na
+**mesma origem** — o cookie de sessão funciona sem CORS. Config em `vercel.json`.
+
+### Pré-requisitos
+- Banco no Supabase já provisionado (schema aplicado).
+- **Aplicar a migration nova** `0008_lgpd.sql` (tabela `consents`): rode
+  `python migrate.py` com `DATABASE_URL` de produção, ou cole o SQL no Supabase
+  SQL Editor.
+- **Criar bucket privado** `avatars` no Supabase Storage (Storage → New bucket,
+  desmarque "Public").
+
+### Import na Vercel
+1. Vercel → Add New → Project → importe o repositório do GitHub.
+2. Framework Preset: **Other** (o `vercel.json` controla os dois builds).
+   Deixe Root Directory na raiz do repo.
+3. Environment Variables:
+
+| Variável | Valor |
+|----------|-------|
+| `DATABASE_URL` | **Transaction Pooler** do Supabase (porta **6543**) |
+| `JWT_SECRET_KEY` | segredo ≥ 32 chars (`python -c "import secrets;print(secrets.token_hex(32))"`) |
+| `ENVIRONMENT` | `production` |
+| `ALLOWED_ORIGINS` | vazio (mesma origem) |
+| `SUPABASE_URL` | URL do projeto Supabase |
+| `SUPABASE_SERVICE_ROLE_KEY` | service role key (nunca `PUBLIC_`) |
+| `SUPABASE_AVATARS_BUCKET` | `avatars` |
+| `NEXT_PUBLIC_API_BASE_URL` | vazio (mesma origem) |
+| OAuth (opcional) | `OAUTH_REDIRECT_BASE_URL=https://<seu-dominio>`, `OAUTH_FRONTEND_CALLBACK_URL=https://<seu-dominio>/oauth/callback`, e as chaves dos provedores |
+
+4. Deploy. `VERCEL=1` é definido automaticamente → conexão-por-request no pooler
+   e storage no Supabase.
+
+### Pós-deploy
+- `GET /api/health/live` → `{"ok": true}` (liveness).
+- `GET /api/health` → `{"ok": true, "db": "connected"}` (readiness com DB).
+- Cadastro (com aceite) → login → transação → upload de avatar → exportar dados →
+  excluir conta.
+- Se o roteamento estático do Next apresentar deep-link 404, valide no **Preview**
+  antes de promover; fallback: manter o container (Railway/Render/Docker) abaixo.
+
 ## Docker (recomendado para desenvolvimento)
 
 ```bash

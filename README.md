@@ -46,7 +46,7 @@ Instruções para gerar screenshots: [docs/assets/README.md](docs/assets/README.
 |--------|-------------|
 | Backend | FastAPI, PostgreSQL, JWT, bcrypt, slowapi |
 | Frontend | Next.js 15, TypeScript, Tailwind CSS, Recharts |
-| Infra | Docker, GitHub Actions, Railway / Render |
+| Infra | Vercel (deploy primário, serverless), Docker, GitHub Actions, Railway / Render |
 | Qualidade | pytest, ruff, bandit, ESLint, tsc |
 
 ## Arquitetura (resumo)
