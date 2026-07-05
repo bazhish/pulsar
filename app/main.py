@@ -2929,6 +2929,13 @@ def build_csv_import_preview(user_id: str, session: dict, mapping: CsvColumnMapp
     }
 
 
+@app.get("/api/health/live")
+def liveness():
+    # Liveness: process is up. No dependencies checked (no DB), so it stays green
+    # during transient database blips — used to decide restarts, not readiness.
+    return {"ok": True, "status": "alive", "uptime_seconds": int(time.time() - startup_time)}
+
+
 @app.get("/api/health")
 def health():
     started_at = time.perf_counter()
