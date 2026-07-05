@@ -11,7 +11,6 @@ import re
 import secrets
 import time
 import uuid
-from contextlib import contextmanager
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
@@ -27,8 +26,7 @@ from fastapi.staticfiles import StaticFiles
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from psycopg2 import errors
-from psycopg2.extras import Json, RealDictCursor
-from psycopg2.pool import ThreadedConnectionPool
+from psycopg2.extras import Json
 from pydantic import BaseModel, Field
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -37,6 +35,15 @@ from starlette.responses import Response
 
 from migrate import run_migrations
 
+from app.core.config import settings
+from app.core.database import (
+    close_db_pool,
+    connection,
+    db_cursor,
+    get_database_url,
+    init_db_pool,
+    storage_available,
+)
 from app.oauth import (
     OAUTH_STATE_COOKIE,
     OAUTH_PROVIDERS,
@@ -51,8 +58,8 @@ load_dotenv()
 BASE_DIR = Path(__file__).resolve().parent.parent
 FRONTEND_OUT_DIR = BASE_DIR / "frontend" / "out"
 
-JWT_ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_HOURS = int(os.getenv("ACCESS_TOKEN_EXPIRE_HOURS", "168"))
+JWT_ALGORITHM = settings.jwt_algorithm
+ACCESS_TOKEN_EXPIRE_HOURS = settings.access_token_expire_hours
 AUTH_COOKIE_NAME = "pulsa_access_token"
 CARD_UNLOCK_SECONDS = 15 * 60
 PIN_FAILURE_WINDOW_SECONDS = 5 * 60
@@ -138,7 +145,6 @@ pin_context = CryptContext(
 )
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login", auto_error=False)
 limiter = Limiter(key_func=get_remote_address)
-db_pool: Optional[ThreadedConnectionPool] = None
 card_pin_failures: dict[str, dict[str, Any]] = {}
 card_unlock_sessions: dict[str, dict[str, Any]] = {}
 csv_import_sessions: dict[str, dict[str, Any]] = {}
@@ -170,26 +176,18 @@ DEFAULT_CATEGORIES: list[tuple[str, str, str, str, int]] = [
 
 
 def is_production() -> bool:
-    return os.getenv("ENVIRONMENT", "development").lower() == "production"
+    return settings.is_production
 
 
-def parse_allowed_origins() -> list[str]:
-    raw_origins = os.getenv("ALLOWED_ORIGINS", "").strip()
-    origins = [origin.strip() for origin in raw_origins.split(",") if origin.strip()]
-    if origins:
-        return origins
-    if is_production():
-        return []
-    return ["http://localhost:8000", "http://127.0.0.1:8000"]
-
-
-ALLOWED_ORIGINS = parse_allowed_origins()
-PROFILE_PHOTO_DIR.mkdir(parents=True, exist_ok=True)
+ALLOWED_ORIGINS = settings.allowed_origins
+if not settings.is_serverless:
+    PROFILE_PHOTO_DIR.mkdir(parents=True, exist_ok=True)
 
 
 app = FastAPI(title="Pulsa API", version="2.0.0")
 app.state.limiter = limiter
-app.mount(PROFILE_PHOTO_URL_PREFIX, StaticFiles(directory=PROFILE_PHOTO_DIR), name="profile-photos")
+if not settings.is_serverless:
+    app.mount(PROFILE_PHOTO_URL_PREFIX, StaticFiles(directory=PROFILE_PHOTO_DIR), name="profile-photos")
 
 
 def rate_limit_handler(request: Request, exc: Exception) -> Response:
@@ -285,20 +283,8 @@ async def add_security_headers(request: Request, call_next):
     return response
 
 
-def get_database_url() -> str:
-    database_url = os.getenv("DATABASE_URL", "").strip()
-    if not database_url:
-        raise RuntimeError("DATABASE_URL environment variable is required.")
-    return database_url
-
-
 def get_jwt_secret() -> str:
-    secret = os.getenv("JWT_SECRET_KEY", "")
-    if not secret:
-        raise RuntimeError("JWT_SECRET_KEY environment variable is required.")
-    if len(secret) < 32:
-        raise RuntimeError("JWT_SECRET_KEY must have at least 32 characters.")
-    return secret
+    return settings.require_jwt_secret()
 
 
 def validate_runtime_config() -> None:
@@ -312,51 +298,6 @@ def validate_runtime_config() -> None:
             raise RuntimeError("ALLOWED_ORIGINS de produ\u00e7\u00e3o n\u00e3o deve apontar para localhost.")
         if "*" in origins:
             logger.warning("ALLOWED_ORIGINS is '*' in production. Use only during the first deploy and replace it with the public HTTPS URL.")
-
-
-def init_db_pool() -> None:
-    global db_pool
-    if db_pool is not None:
-        return
-    db_pool = ThreadedConnectionPool(minconn=2, maxconn=10, dsn=get_database_url())
-
-
-def close_db_pool() -> None:
-    global db_pool
-    if db_pool is not None:
-        db_pool.closeall()
-        db_pool = None
-
-
-def get_connection():
-    if db_pool is None:
-        raise HTTPException(status_code=503, detail="Banco de dados ainda n\u00e3o inicializado.")
-    return db_pool.getconn()
-
-
-def release_connection(conn) -> None:
-    if db_pool is not None:
-        db_pool.putconn(conn)
-
-
-@contextmanager
-def db_cursor(commit: bool = False):
-    conn = get_connection()
-    try:
-        with conn.cursor(cursor_factory=RealDictCursor) as cursor:
-            yield cursor
-        if commit:
-            conn.commit()
-    except Exception:
-        if commit:
-            conn.rollback()
-        raise
-    finally:
-        release_connection(conn)
-
-
-def storage_available() -> bool:
-    return db_pool is not None
 
 
 def token_hash(token: str) -> str:
@@ -391,11 +332,10 @@ def startup() -> None:
     logger.info("Starting Ritmo Financeiro Pro")
     validate_runtime_config()
     init_db_pool()
-    conn = get_connection()
-    try:
-        run_migrations(conn)
-    finally:
-        release_connection(conn)
+    # On serverless (Vercel) migrations run at build time, not per cold start.
+    if not settings.is_serverless:
+        with connection() as conn:
+            run_migrations(conn)
     logger.info("Startup completed")
 
 
@@ -2966,11 +2906,9 @@ def build_csv_import_preview(user_id: str, session: dict, mapping: CsvColumnMapp
 
 @app.get("/api/health")
 def health():
-    conn = None
     started_at = time.perf_counter()
     try:
-        conn = get_connection()
-        with conn.cursor() as cursor:
+        with db_cursor() as cursor:
             cursor.execute("SELECT 1")
             cursor.fetchone()
         latency_ms = round((time.perf_counter() - started_at) * 1000, 2)
@@ -2999,9 +2937,6 @@ def health():
             },
             status_code=503,
         )
-    finally:
-        if conn is not None:
-            release_connection(conn)
 
 
 @app.post("/api/auth/register", status_code=status.HTTP_201_CREATED)
