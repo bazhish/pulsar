@@ -367,12 +367,16 @@ def startup() -> None:
     global startup_time
     startup_time = time.time()
     logger.info("Starting Ritmo Financeiro Pro")
+    # Serverless (Vercel) validates config lazily per request and connects per
+    # request; running validation/pool/migrations at cold start would crash the
+    # entire function when env vars are absent. Migrations run at build/deploy time.
+    if settings.is_serverless:
+        logger.info("Serverless mode: skipping startup validation, pool and migrations")
+        return
     validate_runtime_config()
     init_db_pool()
-    # On serverless (Vercel) migrations run at build time, not per cold start.
-    if not settings.is_serverless:
-        with connection() as conn:
-            run_migrations(conn)
+    with connection() as conn:
+        run_migrations(conn)
     logger.info("Startup completed")
 
 
