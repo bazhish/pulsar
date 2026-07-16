@@ -44,7 +44,7 @@ jobs:
           ENVIRONMENT: testing
           ALLOWED_ORIGINS: http://localhost:8000
         run: pytest tests/ -q --cov=app --cov-report=term-missing --cov-report=xml --cov-fail-under=60
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: "22"
           cache: npm
